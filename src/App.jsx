@@ -17,7 +17,7 @@ const LEVELS = [
     order: '关卡二',
     title: '广场黄金四分钟',
     description: '在广场找到AED，并在黄金四分钟内完成正确急救流程。',
-    status: 'locked',
+    status: 'available',
     accent: 'blue',
     tags: ['10x7网格', 'AED路径', '群众疏导', '时间压力'],
   },
@@ -32,13 +32,28 @@ const LEVELS = [
   },
 ];
 
+function getInitialScreen() {
+  if (typeof window === 'undefined') return 'home';
+  const screenParam = new URLSearchParams(window.location.search).get('screen');
+  return screenParam === 'game' || screenParam === 'levels' ? screenParam : 'home';
+}
+
+function getInitialLevelId() {
+  if (typeof window === 'undefined') return 'level-1';
+  const levelParam = new URLSearchParams(window.location.search).get('level');
+  return LEVELS.some((level) => level.id === levelParam && level.status === 'available') ? levelParam : 'level-1';
+}
+
 function HomeScreen({ onOpenLevels }) {
   return (
     <main className="home-screen">
       <section className="home-hero" aria-label="红花救援队首页">
-        <img className="home-hero-art" src="/assets/ui/home-hero.png" alt="" />
+        <video className="home-hero-art" autoPlay muted loop playsInline poster="/assets/ui/home-hero.png" aria-hidden="true">
+          <source src="/assets/ui/herovideo.mp4" type="video/mp4" />
+        </video>
 
         <div className="home-primary-actions" aria-label="主菜单">
+          <div className="home-menu-title">红花救援队</div>
           <button className="home-action home-action-start" type="button" onClick={onOpenLevels}>
             开始游戏
           </button>
@@ -52,21 +67,30 @@ function HomeScreen({ onOpenLevels }) {
 }
 
 function KitchenPreview() {
+  const previewMap = [
+    ['wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall'],
+    ['wall', 'wall', 'kit', 'kit', 'kit', 'kit', 'smoke', 'obstacle', 'object', 'wall'],
+    ['wall', 'wall', 'kit', 'kit', 'kit', 'smoke', 'smoke', 'kit', 'wall', 'wall'],
+    ['safe', 'cor', 'ent', 'kit', 'kit', 'smoke', 'smoke', 'smoke', 'fire', 'fire'],
+    ['safe', 'cor', 'ent', 'obstacle', 'item', 'smoke', 'smoke', 'smoke', 'fire', 'fire'],
+    ['safe', 'cor', 'ent', 'kit', 'kit', 'smoke', 'smoke', 'smoke', 'smoke', 'hsmoke'],
+    ['wall', 'wall', 'kit', 'kit', 'kit', 'kit', 'smoke', 'hsmoke', 'hsmoke', 'hsmoke'],
+    ['wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall'],
+  ];
+
   const cells = Array.from({ length: 80 }, (_, index) => {
     const row = Math.floor(index / 10);
     const col = index % 10;
-    const isSafe = col === 0 && (row === 1 || row === 5);
-    const isSmoke = col >= 6 || (row === 0 && col >= 4) || (row === 6 && col >= 5);
-    const isWall = row === 7 && (col < 2 || col > 6);
-    const isFire = (row === 0 && col === 6) || (row === 1 && col === 6);
-    const isObstacle = (row === 3 && col === 4) || (row === 5 && col === 5);
+    const tile = previewMap[row][col];
     const className = [
       'map-cell',
-      isSafe ? 'is-safe' : '',
-      isSmoke ? 'is-smoke' : '',
-      isWall ? 'is-wall' : '',
-      isFire ? 'is-fire' : '',
-      isObstacle ? 'is-obstacle' : '',
+      tile === 'safe' ? 'is-safe' : '',
+      tile === 'smoke' || tile === 'hsmoke' ? 'is-smoke' : '',
+      tile === 'hsmoke' ? 'is-high-smoke' : '',
+      tile === 'wall' ? 'is-wall' : '',
+      tile === 'fire' ? 'is-fire' : '',
+      tile === 'obstacle' || tile === 'object' ? 'is-obstacle' : '',
+      tile === 'item' ? 'is-item' : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -77,10 +101,10 @@ function KitchenPreview() {
   return (
     <div className="level-preview level-preview-kitchen" aria-hidden="true">
       <div className="preview-grid">{cells}</div>
-      <img className="preview-sprite preview-player" src="/assets/sprites/player.png" alt="" />
-      <img className="preview-sprite preview-grandma" src="/assets/sprites/grandma.png" alt="" />
-      <img className="preview-sprite preview-mask" src="/assets/sprites/mask.png" alt="" />
-      <img className="preview-sprite preview-valve" src="/assets/sprites/valve.png" alt="" />
+      <img className="preview-sprite preview-player" src="/assets/level1/characters/01_player_idle.png" alt="" />
+      <img className="preview-sprite preview-grandma" src="/assets/level1/characters/03_grandma_idle.png" alt="" />
+      <img className="preview-sprite preview-mask" src="/assets/level1/items/12_mask_grid.png" alt="" />
+      <img className="preview-sprite preview-valve" src="/assets/level1/items/13_gas_valve.png" alt="" />
     </div>
   );
 }
@@ -105,7 +129,11 @@ function PlazaPreview() {
   return (
     <div className="level-preview level-preview-plaza" aria-hidden="true">
       <div className="preview-grid preview-grid-plaza">{cells}</div>
-      <img className="preview-sprite preview-aed" src="/assets/sprites/aed.png" alt="" />
+      <img className="preview-sprite preview-plaza-player" src="/assets/level2/characters/player_idle.png" alt="" />
+      <img className="preview-sprite preview-plaza-elder" src="/assets/level2/characters/fallen_elderly.png" alt="" />
+      <img className="preview-sprite preview-plaza-aed" src="/assets/level2/items/aed_cabinet.png" alt="" />
+      <img className="preview-sprite preview-plaza-crowd" src="/assets/level2/characters/crowd_c.png" alt="" />
+      <div className="preview-plaza-route" />
     </div>
   );
 }
@@ -140,7 +168,7 @@ function LevelCard({ level, selected, onSelect }) {
       </div>
       {!available && (
         <div className="locked-strip">
-          {level.id === 'level-2' ? '完成上一关解锁' : '敬请期待'}
+          敬请期待
         </div>
       )}
     </article>
@@ -189,14 +217,10 @@ function LevelSelectScreen({ selectedLevel, onBackHome, onSelectLevel, onEnterLe
 function GameScreen({ level, onBackLevels }) {
   return (
     <main className="game-screen">
-      <header className="game-header">
+      <header className="game-header" aria-label={`${level.order} ${level.title}`}>
         <button className="back-button" type="button" onClick={onBackLevels}>
           返回选关
         </button>
-        <div>
-          <p>{level.order}</p>
-          <h1>{level.title}</h1>
-        </div>
       </header>
       <Suspense fallback={<section className="game-shell loading-shell">游戏场景加载中...</section>}>
         <GameCanvas level={level} />
@@ -206,8 +230,8 @@ function GameScreen({ level, onBackLevels }) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState('home');
-  const [selectedLevelId, setSelectedLevelId] = useState('level-1');
+  const [screen, setScreen] = useState(getInitialScreen);
+  const [selectedLevelId, setSelectedLevelId] = useState(getInitialLevelId);
 
   const selectedLevel = useMemo(
     () => LEVELS.find((level) => level.id === selectedLevelId) ?? LEVELS[0],

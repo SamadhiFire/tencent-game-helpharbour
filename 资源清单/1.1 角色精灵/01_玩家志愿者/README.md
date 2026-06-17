@@ -54,6 +54,12 @@
 | `01_player_cpr_press.png` | CPR按压帧：跪地姿态，双手向下按压（胸外按压阶段） |
 | `01_player_cpr_release.png` | CPR释放帧：跪地姿态，双手微微抬起（按压间释放阶段） |
 
+### 低姿前进 (Low Crawl) — 浓烟区爬行移动动画
+| 文件名 | 内容说明 |
+|--------|----------|
+| `01_player_crawl_down_1.png` | 低姿爬行帧1：朝南方向弯腰半蹲低姿前进，膝盖深屈身体降至半高，左膝前迈右膝在后，左手撑地右臂前伸，用于浓烟区域内低姿移动避免吸入烟雾 |
+| `01_player_crawl_down_2.png` | 低姿爬行帧2：朝南方向弯腰半蹲低姿前进，与帧1对称，右膝前迈左膝在后，右手撑地左臂前伸，交替帧形成低姿爬行循环动画 |
+
 ---
 
 ## 动画播放说明
@@ -61,6 +67,7 @@
 - **行走动画**：每方向2帧交替循环播放，建议帧间隔 ~150ms
 - **CPR动画**：press → release 交替循环，建议帧间隔 ~300ms（模拟30:2节奏中的按压节奏）
 - **站立**：静态1帧，可叠加微小呼吸晃动效果（代码实现）
+- **低姿爬行**：crawl_down_1 → crawl_down_2 交替循环播放，建议帧间隔 ~200ms（比正常走速稍慢表现低姿艰难感）
 
 ---
 
@@ -79,5 +86,6 @@ const sprites = {
     right: ['01_player_walk_right_1.png', '01_player_walk_right_2.png'],
   },
   cpr: ['01_player_cpr_press.png', '01_player_cpr_release.png'],
+  crawlDown: ['01_player_crawl_down_1.png', '01_player_crawl_down_2.png'],
 };
 ```

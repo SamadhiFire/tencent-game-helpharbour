@@ -41,6 +41,13 @@
 | `03_grandma_walk_1.png` | 跟随走路帧1：左脚前迈，右脚后，双臂微微自然摆动，眼神信任地跟随前方引导者 |
 | `03_grandma_walk_2.png` | 跟随走路帧2：右脚前迈，左脚后，双臂反向摆动，持续跟随 |
 
+### 戴面罩跟随移动 (Masked Walk) — 佩戴防烟面罩后的走路动画
+| 文件名 | 内容说明 |
+|--------|----------|
+| `03_grandma_masked_idle.png` | 戴面罩站立姿态：面向玩家（朝南），佩戴橙红色工业防烟面罩，面罩覆盖口鼻区域两侧白色滤罐清晰可见，面罩上方眼睛平静安详，双手自然垂于身前，身体不再恐慌颤抖，被防护后安心等待跟随撤离的状态 |
+| `03_grandma_masked_walk_1.png` | 戴面罩跟随走路帧1：左脚前迈，右脚后，双臂自然摆动，佩戴橙红色防烟面罩，眼神信任地跟随前方引导者 |
+| `03_grandma_masked_walk_2.png` | 戴面罩跟随走路帧2：右脚前迈，左脚后，双臂反向摆动，持续跟随撤离 |
+
 ---
 
 ## 动画播放说明
@@ -49,6 +56,8 @@
 - **安抚态**：从恐慌态过渡到安抚态时，可渐变或直接切换，静态1帧
 - **跟随移动**：walk_1 → walk_2 交替循环播放，建议帧间隔 ~180ms（老人步速较慢）
 - **站立**：静态1帧，可叠加微小呼吸晃动
+- **戴面罩状态**：给王奶奶使用防烟面罩后切换到 masked 系列精灵，masked_walk 交替循环播放
+- **戴面罩站立**：静态1帧，用于护送过程中停止时的显示
 
 ---
 
@@ -62,5 +71,7 @@ const grandmaSprites = {
   panic:   ['03_grandma_panic_1.png', '03_grandma_panic_2.png'],
   calm:    '03_grandma_calm.png',
   walk:    ['03_grandma_walk_1.png', '03_grandma_walk_2.png'],
+  maskedIdle: '03_grandma_masked_idle.png',
+  maskedWalk:['03_grandma_masked_walk_1.png', '03_grandma_masked_walk_2.png'],
 };
 ```

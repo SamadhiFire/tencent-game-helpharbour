@@ -58,15 +58,35 @@ button {
   object-position: center;
 }
 
+.home-hero video.home-hero-art {
+  display: block;
+}
+
 .home-primary-actions {
   position: absolute;
   z-index: 2;
-  top: 31.2vh;
+  top: 28.6vh;
   left: 50%;
   display: grid;
   width: min(430px, 44vw);
   transform: translateX(-50%);
-  gap: 16px;
+  gap: 14px;
+}
+
+.home-menu-title {
+  justify-self: center;
+  margin-bottom: 4px;
+  padding: 8px 22px 10px;
+  border: 4px solid rgba(102, 37, 29, 0.92);
+  border-radius: 8px;
+  color: #fff6df;
+  background: linear-gradient(180deg, rgba(158, 42, 33, 0.95), rgba(116, 37, 27, 0.95));
+  box-shadow: 0 6px 0 rgba(92, 35, 25, 0.8), 0 10px 18px rgba(77, 36, 22, 0.22);
+  font-size: clamp(24px, 2vw, 34px);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 2px 0 rgba(83, 26, 18, 0.42);
 }
 
 .home-action {
@@ -340,6 +360,11 @@ button {
   background: #4b4944;
 }
 
+.map-cell.is-high-smoke {
+  background: #34383d;
+  box-shadow: inset 0 0 0 1px rgba(225, 69, 50, 0.58);
+}
+
 .map-cell.is-wall {
   background: #766154;
 }
@@ -350,6 +375,10 @@ button {
 
 .map-cell.is-obstacle {
   background: #8a705c;
+}
+
+.map-cell.is-item {
+  background: #f6c85f;
 }
 
 .map-cell.is-blue {
@@ -395,9 +424,66 @@ button {
   width: 11%;
 }
 
-.preview-aed {
-  right: 12%;
-  top: 34%;
+.preview-coming-mark {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  padding: 10px 18px;
+  transform: translate(-50%, -50%);
+  border: 3px solid rgba(255, 249, 235, 0.86);
+  border-radius: 8px;
+  color: #fff9eb;
+  background: rgba(38, 49, 61, 0.68);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.preview-plaza-player {
+  left: 20%;
+  top: 43%;
+  width: 16%;
+}
+
+.preview-plaza-elder {
+  left: 29%;
+  top: 47%;
+  width: 20%;
+}
+
+.preview-plaza-aed {
+  right: 4%;
+  bottom: 18%;
+  width: 15%;
+}
+
+.preview-plaza-crowd {
+  left: 62%;
+  top: 47%;
+  width: 14%;
+}
+
+.preview-plaza-route {
+  position: absolute;
+  z-index: 2;
+  left: 41%;
+  right: 14%;
+  top: 61%;
+  height: 0;
+  border-top: 6px dashed #ffd764;
+  filter: drop-shadow(0 2px 2px rgba(74, 56, 20, 0.35));
+}
+
+.preview-plaza-route::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: -13px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 18px solid #ffd764;
 }
 
 .level-preview-kitchen::after {
@@ -505,54 +591,51 @@ button {
 
 .game-screen {
   min-height: 100vh;
-  padding: 20px;
-  background:
-    radial-gradient(circle at 5% 0%, rgba(211, 72, 60, 0.18), transparent 22%),
-    linear-gradient(180deg, #f6ead7, #e9cfaa);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  background: #05080b;
 }
 
 .game-header {
+  position: fixed;
+  z-index: 5;
+  top: 14px;
+  left: 14px;
   display: flex;
   align-items: center;
-  gap: 18px;
-  max-width: 1180px;
-  margin: 0 auto 14px;
-}
-
-.game-header p,
-.game-header h1 {
   margin: 0;
 }
 
-.game-header p {
-  color: #a04537;
-  font-weight: 900;
-}
-
-.game-header h1 {
-  color: #3d2a24;
-  font-size: clamp(24px, 3vw, 34px);
-  letter-spacing: 0;
-}
-
 .back-button {
-  min-height: 48px;
-  padding: 0 20px;
-  color: #7d2e24;
-  background: #fff8e8;
-  font-size: 18px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 2px solid rgba(246, 229, 200, 0.48);
+  border-radius: 8px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.34);
+  color: #f6e5c8;
+  background: rgba(16, 24, 32, 0.78);
+  backdrop-filter: blur(8px);
+  font-size: 15px;
+}
+
+.game-header .back-button:hover {
+  filter: brightness(1.08);
+  transform: translateY(0);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.42);
 }
 
 .game-shell {
-  width: min(1180px, calc(100vw - 40px));
-  height: min(74vh, 740px);
-  min-height: 560px;
-  margin: 0 auto;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  min-height: 0;
+  margin: 0;
   overflow: hidden;
-  border: 6px solid #7b4e39;
-  border-radius: 8px;
-  background: #f7ead6;
-  box-shadow: 0 12px 24px rgba(78, 45, 30, 0.22);
+  border: 0;
+  border-radius: 0;
+  background: #101820;
+  box-shadow: 0 0 48px rgba(0, 0, 0, 0.72);
 }
 
 .game-shell canvas {
@@ -562,7 +645,8 @@ button {
 .loading-shell {
   display: grid;
   place-items: center;
-  color: #7d2e24;
+  color: #f6e5c8;
+  background: #101820;
   font-size: 22px;
   font-weight: 900;
 }
@@ -662,18 +746,13 @@ button {
     min-height: 64px;
   }
 
-  .game-screen {
-    padding: 12px;
-  }
-
   .game-header {
-    align-items: flex-start;
-    flex-direction: column;
+    top: 8px;
+    left: 8px;
   }
 
   .game-shell {
-    width: calc(100vw - 24px);
-    height: 68vh;
-    min-height: 430px;
+    width: min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
   }
 }
