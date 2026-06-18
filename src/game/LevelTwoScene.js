@@ -16,6 +16,15 @@ const GRID_COLS = 10;
 const GRID_ROWS = 7;
 const GRID_ORIGIN = { x: 168, y: 116 };
 const MAX_AP = 4;
+const SEVERE_ERROR_LIMIT = 5;
+const AED_REANALYSIS_INTERVAL = 5;
+const CPR_COMBO_BONUS = 3;
+const QTE_HIT_ZONES = [
+  { start: 114, end: 180 },
+  { start: 220, end: 262 },
+];
+const QTE_NEUTRAL_ZONE = { start: 181, end: 219 };
+const CONFLICTING_BGM_KEYS = ['a38_fire_loop', 'l1_game_bgm'];
 const FONT = '"Microsoft YaHei", "PingFang SC", Arial, sans-serif';
 const LEVEL_ASSET = '/assets/level2';
 
@@ -179,6 +188,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.load.audio('l2_crowd_loop', `${a}/crowd_loop.mp3`);
     this.load.audio('l2_success', `${a}/success.mp3`);
     this.load.audio('l2_flower', `${a}/flower.mp3`);
+    this.load.audio('l2_game_bgm', `${a}/game_bgm.mp3`);
   }
 
   create() {
@@ -196,8 +206,12 @@ export default class LevelTwoScene extends Phaser.Scene {
 
     this.drawChrome();
     this.refreshScene();
+    this.startGameBgm();
     this.setHuahua('先看现场是否安全。点击广场高亮区域，确认没有车流、火电等明显危险。', 'hint');
     this.refreshScene();
+
+    this.events.once('shutdown', () => this.stopGameBgm());
+    this.events.once('destroy', () => this.stopGameBgm());
 
     // 嘈杂的背景人群声音只在开头播放 10 秒
     this.time.delayedCall(10000, () => {
@@ -244,9 +258,13 @@ export default class LevelTwoScene extends Phaser.Scene {
       wrongActions: 0,
       cprHits: 0,
       cprAttempts: 0,
+      cprNeutralPresses: 0,
+      cprCombo: 0,
+      bestCprCombo: 0,
       aedStep: 0,
       aedDelay: 0,
       pathCleared: false,
+      crowdInterventions: 0,
       cprFeedback: null,
       player: { ...START.player },
       elder: { ...START.elder },
@@ -256,7 +274,7 @@ export default class LevelTwoScene extends Phaser.Scene {
         { id: 'c1', x: 3, y: 2, texture: 'l2_crowd_a', bubble: '先别乱动', blocking: false },
         { id: 'c2', x: 4, y: 3, texture: 'l2_crowd_b', bubble: '给他喝点水？', blocking: false },
         { id: 'c3', x: 6, y: 4, texture: 'l2_crowd_c', bubble: '我看看', blocking: true },
-        { id: 'c4', x: 7, y: 3, texture: 'l2_crowd_d', bubble: 'AED在哪边？', blocking: false },
+        { id: 'c4', x: 7, y: 4, texture: 'l2_crowd_d', bubble: '我在拍视频', blocking: true },
       ],
       score: {
         procedure: 0,
@@ -306,10 +324,11 @@ export default class LevelTwoScene extends Phaser.Scene {
       title: this.level?.title ?? '广场黄金四分钟',
       emblem: '急',
       metrics: [
-        { id: 'ap', label: '行动力', icon: '行', width: 150 },
-        { id: 'stability', label: '生命稳定度', icon: '稳', width: 214, bar: true, barWidth: 122, intent: 'safe' },
-        { id: 'phase', label: '急救阶段', icon: '段', width: 270, intent: 'warn' },
-        { id: 'command', label: '现场指挥', icon: '令', width: 184 },
+        { id: 'ap', label: '行动力', icon: '行', width: 132 },
+        { id: 'stability', label: '生命稳定度', icon: '稳', width: 190, bar: true, barWidth: 100, intent: 'safe' },
+        { id: 'phase', label: '急救阶段', icon: '段', width: 238, intent: 'warn' },
+        { id: 'ambulance', label: '救护车', icon: '120', width: 160, intent: 'danger' },
+        { id: 'command', label: '现场指挥', icon: '令', width: 156 },
       ],
     });
     this.apText = hud.ap.value;
@@ -317,6 +336,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.stabilityBar = hud.stability.bar;
     this.stabilityBarWidth = hud.stability.barWidth;
     this.phaseText = hud.phase.value;
+    this.ambulanceText = hud.ambulance.value;
     this.commandText = hud.command.value;
 
     const assistant = drawAssistantPanel(this, {
@@ -652,6 +672,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.apText.setText(`${this.state.ap}/${MAX_AP}`);
     this.stabilityText.setText(`${Math.round(this.state.stability)}`);
     this.phaseText.setText(this.getPhaseLabel());
+    this.ambulanceText?.setText(this.getAmbulanceHudText());
     this.commandText.setText(`指挥点 ${this.state.commandPoint}`);
     if (this.stabilityBar) {
       this.stabilityBar.displayWidth = (this.stabilityBarWidth ?? 122) * clamp(this.state.stability / 100, 0, 1);
@@ -661,14 +682,12 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.huahuaBubble.setText(this.huahuaText);
     this.huahuaSprite.setTexture(`l2_huahua_${this.huahuaMood}`);
     this.goalText.setText(this.getGoalText());
-    const ambulanceStatus = this.state.ambulanceCountdown === null
-      ? '🚑 救护车：未呼叫'
-      : this.state.ambulanceCountdown === 0
-        ? '🚑 救护车：已到达现场'
-        : `🚑 救护车：预计 ${this.state.ambulanceCountdown} 回合后到达`;
+    const ambulanceStatus = this.getAmbulanceStatusText();
     const aedStatus = `⚡ AED状态：${this.getAedStatusText()}`;
-    const cprStatus = `❤️ CPR按压命中：${this.state.cprHits}/${Math.max(this.state.cprAttempts, 1)}`;
-    this.inventoryText?.setText(`${ambulanceStatus}\n${aedStatus}\n${cprStatus}`);
+    const neutralStatus = this.state.cprNeutralPresses ? `，灰区 ${this.state.cprNeutralPresses}` : '';
+    const cprStatus = `❤️ CPR按压命中：${this.state.cprHits}/${Math.max(this.state.cprAttempts, 1)}${neutralStatus}`;
+    const comboStatus = `CPR连击：${this.state.cprCombo}（最佳 ${this.state.bestCprCombo}）`;
+    this.inventoryText?.setText(`${ambulanceStatus}\n${aedStatus}\n${cprStatus}\n${comboStatus}`);
   }
 
   drawActionPanel() {
@@ -712,12 +731,13 @@ export default class LevelTwoScene extends Phaser.Scene {
     const barY = y + 70;
     const barW = 308;
     this.actionLayer.add(this.add.rectangle(barX, barY, barW, 34, 0xfcf5e8, 1).setOrigin(0, 0.5).setStrokeStyle(3, 0x3f2a23, 1));
-    this.actionLayer.add(this.add.rectangle(barX + 114, barY, 66, 34, 0x2fbf7a, 0.9).setOrigin(0, 0.5));
-    this.actionLayer.add(this.add.rectangle(barX + 220, barY, 42, 34, 0x2fbf7a, 0.9).setOrigin(0, 0.5));
+    this.actionLayer.add(this.add.rectangle(barX + QTE_NEUTRAL_ZONE.start, barY, QTE_NEUTRAL_ZONE.end - QTE_NEUTRAL_ZONE.start, 34, 0xb7b2a8, 0.72).setOrigin(0, 0.5));
+    QTE_HIT_ZONES.forEach((zone) => {
+      this.actionLayer.add(this.add.rectangle(barX + zone.start, barY, zone.end - zone.start, 34, 0x2fbf7a, 0.9).setOrigin(0, 0.5));
+    });
     this.actionLayer.add(this.add.text(barX + barW / 2, barY + 38, this.getCprLabel(), textStyle(17, '#2fbf7a', { fontStyle: 'bold' })).setOrigin(0.5));
-    if (!this.state.cprAttempts) {
-      this.actionLayer.add(this.add.text(x + 252, y + 18, '模拟频率: 110次/分', textStyle(13, '#8c7355', { fontStyle: 'bold' })).setOrigin(0, 0));
-    }
+    const comboLabel = this.state.cprCombo > 0 ? `连击 ${this.state.cprCombo}` : `最佳连击 ${this.state.bestCprCombo}`;
+    this.actionLayer.add(this.add.text(x + 252, y + 18, comboLabel, textStyle(13, '#8c7355', { fontStyle: 'bold' })).setOrigin(0, 0));
     this.qteBar = { x: barX, width: barW };
     this.qteMarker = this.add.triangle(this.getQteX(this.time.now), barY - 28, 0, 0, 22, 0, 11, 20, COLORS.red, 1);
     this.actionLayer.add(this.qteMarker);
@@ -1303,19 +1323,34 @@ export default class LevelTwoScene extends Phaser.Scene {
       return;
     }
 
-    const hit = this.isQteHit(this.time.now);
+    const qteResult = this.getQteResult(this.time.now);
     this.state.cprAttempts += 1;
-    if (hit) {
+    if (qteResult === 'hit') {
       this.state.cprHits += 1;
-      this.state.stability = clamp(this.state.stability - 1, 0, 100);
-      this.state.cprFeedback = { text: '按压有效 (~110次/分)', color: CSS.green, stamp: this.time.now };
+      this.state.cprCombo += 1;
+      this.state.bestCprCombo = Math.max(this.state.bestCprCombo, this.state.cprCombo);
+      const comboBurst = this.state.cprCombo % CPR_COMBO_BONUS === 0;
+      this.state.stability = clamp(this.state.stability + (comboBurst ? 3 : 1), 0, 100);
+      this.state.score.cpr = Math.max(this.state.score.cpr, Math.min(8, Math.floor(this.state.bestCprCombo / CPR_COMBO_BONUS) * 2));
+      this.state.cprFeedback = {
+        text: comboBurst ? `节奏完美 x${this.state.cprCombo}` : '按压有效 (~110次/分)',
+        color: CSS.green,
+        stamp: this.time.now,
+      };
       this.playSfx('l2_cpr_hit', 0.72);
-      this.setHuahua('节奏稳住了，继续。', 'encourage');
+      this.setHuahua(comboBurst ? '连续命中，节奏很稳。继续保持，不要被AED步骤打断。' : '节奏稳住了，继续。', 'encourage');
       
       // 累计按压次数 (用于 30:2 呼吸循环)
       this.state.cprCount = (this.state.cprCount || 0) + 1;
+    } else if (qteResult === 'neutral') {
+      this.state.cprNeutralPresses += 1;
+      this.state.cprCombo = 0;
+      this.state.cprFeedback = { text: '接近标准区，稳住', color: '#8c7355', stamp: this.time.now };
+      this.playSfx('l2_cpr_hit', 0.32);
+      this.setHuahua('这次接近标准区，不扣稳定度。重新跟上绿色节奏。', 'hint');
     } else {
-      this.state.stability = clamp(this.state.stability - 6, 0, 100);
+      this.state.stability = clamp(this.state.stability - 4, 0, 100);
+      this.state.cprCombo = 0;
       const missHint = this.getQteMissHint(this.time.now);
       this.state.cprFeedback = { text: missHint.label, color: CSS.red, stamp: this.time.now };
       this.playSfx('l2_error', 0.68);
@@ -1324,9 +1359,7 @@ export default class LevelTwoScene extends Phaser.Scene {
 
     this.state.rescueRound += 1;
     this.state.commandPoint = 1;
-    if (this.state.hasCalled120 && this.state.ambulanceCountdown !== null) {
-      this.state.ambulanceCountdown = Math.max(0, this.state.ambulanceCountdown - 1);
-    }
+    this.advanceAmbulanceCountdown();
 
     // 检查 30:2 人工呼吸循环触发 (6次有效按压触发)
     if (this.state.cprCount >= 6) {
@@ -1335,10 +1368,10 @@ export default class LevelTwoScene extends Phaser.Scene {
       return;
     }
 
-    // 在 AED 正常使用后的阶段（S6 阶段），每隔 2 次按压触发一次周期性 AED 心率再分析
+    // AED 正常使用后降低再分析频率，避免弹窗过密打断 CPR 节奏。
     if (this.state.phase === 'S5_WAIT_AMBULANCE') {
       this.state.aedAnalysisTimer = (this.state.aedAnalysisTimer || 0) + 1;
-      if (this.state.aedAnalysisTimer >= 2) {
+      if (this.state.aedAnalysisTimer >= AED_REANALYSIS_INTERVAL) {
         this.state.aedAnalysisTimer = 0;
         this.state.aedAnalyzing = true;
         this.showAedAnalysisWarningCard();
@@ -1358,6 +1391,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     }
     const blockingCrowd = this.state.crowds.find((crowd) => this.isCrowdOnAedPath(crowd));
     if (!blockingCrowd) {
+      this.state.pathCleared = true;
       this.setHuahua('通道已经畅通，无需疏散。继续CPR。', 'hint');
       this.refreshScene();
       return;
@@ -1369,10 +1403,22 @@ export default class LevelTwoScene extends Phaser.Scene {
     const target = this.findCrowdMoveCell(blockingCrowd);
     blockingCrowd.x = target.x;
     blockingCrowd.y = target.y;
-    this.state.pathCleared = true;
-    this.state.score.scene = 4;
-    this.setHuahua('很好，AED通道清出来了。你继续留在老人身边。', 'encourage');
+    this.state.crowdInterventions += 1;
+    const hasMoreBlockingCrowd = this.state.crowds.some((crowd) => this.isCrowdOnAedPath(crowd));
+    this.state.pathCleared = !hasMoreBlockingCrowd;
+    this.state.score.scene = Math.max(this.state.score.scene, this.state.pathCleared ? 6 : 3);
+    this.setHuahua(
+      this.state.pathCleared ? '很好，AED通道清出来了。你继续留在老人身边。' : '第一位群众让开了，但通道上还有人停留。下一轮指挥点继续疏散。',
+      this.state.pathCleared ? 'encourage' : 'hint',
+    );
     this.refreshScene();
+  }
+
+  advanceAmbulanceCountdown() {
+    if (!this.state.hasCalled120 || this.state.ambulanceCountdown === null) return;
+
+    const minimumCountdown = this.state.aedUsedCorrectly ? 0 : 1;
+    this.state.ambulanceCountdown = Math.max(minimumCountdown, this.state.ambulanceCountdown - 1);
   }
 
   showAedUseCard() {
@@ -1534,7 +1580,7 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   resolveRescueState() {
     if (this.state.gameOver) return;
-    if (this.state.severeErrors >= 3) {
+    if (this.state.severeErrors >= SEVERE_ERROR_LIMIT) {
       this.finish(false, '连续严重错误偏离了急救流程。复盘后按顺序完成判断、呼救、AED和CPR。');
       return;
     }
@@ -1542,7 +1588,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       this.finish(false, '救援流程被耽误太久了。下次先让120在路上，再尽快开始CPR。');
       return;
     }
-    if (this.state.ambulanceCountdown === 0) {
+    if (this.state.ambulanceCountdown === 0 && this.state.aedUsedCorrectly && this.state.phase === 'S5_WAIT_AMBULANCE') {
       this.finish(true, '救护车到达，专业救援接手。你完成了关键流程。');
     }
   }
@@ -1598,6 +1644,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     let score = 0;
     score += this.state.score.procedure;
     score += this.state.score.cooperation;
+    score += this.state.score.cpr;
     const cprRate = this.state.cprAttempts ? this.state.cprHits / this.state.cprAttempts : 0;
     score += Math.round(cprRate * 14);
     if (this.state.cprAttempts >= 5) score += 4;
@@ -1628,12 +1675,15 @@ export default class LevelTwoScene extends Phaser.Scene {
       this.state.aedUsedCorrectly ? '已按顺序完成AED并离身确认。' : 'AED步骤还不完整。',
     ];
     if (this.state.pathCleared) lines.push('已疏散AED通道。');
+    if (this.state.crowdInterventions > 0) lines.push(`现场疏导 ${this.state.crowdInterventions} 次。`);
+    if (this.state.bestCprCombo >= CPR_COMBO_BONUS) lines.push(`CPR最佳连击 ${this.state.bestCprCombo}。`);
     return lines.join('\n');
   }
 
   applyWrongAction(message, stabilityLoss, severe = true) {
     if (this.state.ap > 0 && !this.state.cprStarted) this.state.ap -= 1;
-    this.state.stability = clamp(this.state.stability - stabilityLoss, 0, 100);
+    const adjustedLoss = severe ? Math.max(4, Math.ceil(stabilityLoss * 0.8)) : Math.max(1, Math.ceil(stabilityLoss * 0.6));
+    this.state.stability = clamp(this.state.stability - adjustedLoss, 0, 100);
     this.state.wrongActions += 1;
     if (severe) this.state.severeErrors += 1;
     this.playSfx('l2_error', 0.72);
@@ -1664,6 +1714,15 @@ export default class LevelTwoScene extends Phaser.Scene {
   showDecisionCard({ title, body, options, persist = false }) {
     this.modalLayer.removeAll(true);
     this.modalOpen = true;
+    this.startGameBgm();
+    const wrappedOptions = options.map((option) => ({
+      ...option,
+      onSelect: () => {
+        this.startGameBgm();
+        if (this.shouldPlayChoiceReward(option, persist)) this.playChoiceRewardSfx();
+        option.onSelect?.();
+      },
+    }));
 
     drawDecisionOverlay(this, {
       layer: this.modalLayer,
@@ -1671,7 +1730,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       height: HEIGHT,
       title,
       body,
-      options,
+      options: wrappedOptions,
       persist,
     });
   }
@@ -1847,8 +1906,24 @@ export default class LevelTwoScene extends Phaser.Scene {
     return '未指派';
   }
 
+  getAmbulanceHudText() {
+    if (this.state.ambulanceCountdown === null) return '未呼叫';
+    if (this.state.ambulanceCountdown === 0) return '接手中';
+    return `${this.state.ambulanceCountdown}回合`;
+  }
+
+  getAmbulanceStatusText() {
+    if (this.state.ambulanceCountdown === null) return '🚑 救护车：未呼叫';
+    if (this.state.ambulanceCountdown === 0) return '🚑 救护车：已到达现场';
+    if (!this.state.aedUsedCorrectly && this.state.ambulanceCountdown === 1) {
+      return '🚑 救护车：即将到达，先完成AED并继续CPR';
+    }
+    return `🚑 救护车：预计 ${this.state.ambulanceCountdown} 回合后到达`;
+  }
+
   getCprLabel() {
     if (!this.state.cprAttempts) return '跟随绿区指针频率按压';
+    if (this.state.cprCombo >= CPR_COMBO_BONUS) return `节奏连击 ${this.state.cprCombo}，继续保持`;
     const rate = Math.round((this.state.cprHits / this.state.cprAttempts) * 100);
     if (rate >= 70) return `频率极佳 (~110次/分) [命中率 ${rate}%]`;
     if (rate >= 45) return `频率偏离 (~90或~130次/分) [命中率 ${rate}%]`;
@@ -1862,9 +1937,15 @@ export default class LevelTwoScene extends Phaser.Scene {
   }
 
   isQteHit(time) {
-    if (!this.qteBar) return true;
+    return this.getQteResult(time) === 'hit';
+  }
+
+  getQteResult(time) {
+    if (!this.qteBar) return 'hit';
     const x = this.getQteX(time) - this.qteBar.x;
-    return (x >= 114 && x <= 180) || (x >= 220 && x <= 262);
+    if (QTE_HIT_ZONES.some((zone) => x >= zone.start && x <= zone.end)) return 'hit';
+    if (x >= QTE_NEUTRAL_ZONE.start && x <= QTE_NEUTRAL_ZONE.end) return 'neutral';
+    return 'miss';
   }
 
   getQteMissHint(time) {
@@ -1872,8 +1953,8 @@ export default class LevelTwoScene extends Phaser.Scene {
       return { label: '节奏偏了', message: '看准绿色区域再按，现实中按压频率应保持在每分钟100-120次。' };
     }
     const x = this.getQteX(time) - this.qteBar.x;
-    if (x < 114) return { label: '按压过快!', message: '按压节奏过快 (相当于现实中 >130次/分)，心脏没有足够时间舒张回盈。标准为100-120次/分。' };
-    if (x > 262) return { label: '按压过慢!', message: '按压节奏过慢 (相当于现实中 <90次/分)，无法提供足够的心脑血液灌注。标准为100-120次/分。' };
+    if (x < QTE_HIT_ZONES[0].start) return { label: '按压过快!', message: '按压节奏过快 (相当于现实中 >130次/分)，心脏没有足够时间舒张回盈。标准为100-120次/分。' };
+    if (x > QTE_HIT_ZONES[1].end) return { label: '按压过慢!', message: '按压节奏过慢 (相当于现实中 <90次/分)，无法提供足够的心脑血液灌注。标准为100-120次/分。' };
     return { label: '节奏不稳!', message: '按压频率不稳定，请配合摆动指针，在绿色标准频率区(100-120次/分)按压。' };
   }
 
@@ -1908,6 +1989,41 @@ export default class LevelTwoScene extends Phaser.Scene {
     } catch {
       // Ambience is optional.
     }
+  }
+
+  startGameBgm() {
+    try {
+      CONFLICTING_BGM_KEYS.forEach((key) => this.sound.stopByKey?.(key));
+      if (!this.gameBgm) {
+        this.sound.stopByKey?.('l2_game_bgm');
+        this.gameBgm = this.sound.add('l2_game_bgm', { loop: true, volume: 0.18 });
+      }
+      if (!this.gameBgm.isPlaying) this.gameBgm.play();
+    } catch {
+      // Browser autoplay policies can block BGM before the first user gesture.
+    }
+  }
+
+  stopGameBgm() {
+    try {
+      if (this.gameBgm?.isPlaying) this.gameBgm.stop();
+      this.gameBgm?.destroy?.();
+      this.gameBgm = null;
+    } catch {
+      // BGM is optional; leaving the scene must still continue normally.
+    }
+  }
+
+  shouldPlayChoiceReward(option, persist) {
+    if (persist || option.disabled || option.danger) return false;
+    return Boolean(option.recommended);
+  }
+
+  playChoiceRewardSfx() {
+    const now = this.time.now;
+    if (now - (this.lastChoiceRewardAt ?? 0) < 160) return;
+    this.lastChoiceRewardAt = now;
+    this.playSfx('l2_flower', 0.62);
   }
 
   updateCrowdAmbience() {

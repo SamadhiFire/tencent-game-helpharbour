@@ -17,6 +17,8 @@ const GRID_COLS = 10;
 const GRID_ROWS = 8;
 const MAX_AP = 4;
 const MAX_ROUND = 12;
+const ESCORT_BONUS_ROUNDS = 5;
+const CONFLICTING_BGM_KEYS = ['l2_game_bgm'];
 const FONT = '"Microsoft YaHei", "PingFang SC", Arial, sans-serif';
 const LEVEL_ASSET = '/assets/level1';
 
@@ -91,6 +93,25 @@ const PANIC_SCRIPT = new Map([
   [4, { x: 7, y: 6 }],
   [6, { x: 8, y: 6 }],
 ]);
+
+const PANIC_SCRIPT_VARIANTS = [
+  PANIC_SCRIPT,
+  new Map([
+    [2, { x: 8, y: 6 }],
+    [4, { x: 7, y: 6 }],
+    [6, { x: 7, y: 5 }],
+  ]),
+  new Map([
+    [2, { x: 9, y: 5 }],
+    [4, { x: 8, y: 6 }],
+    [6, { x: 7, y: 6 }],
+  ]),
+];
+
+const ESCORT_SMOKE_SHIFT_TILES = [
+  { x: 5, y: 5 },
+  { x: 4, y: 5 },
+];
 
 const DIRS = {
   up: { label: '向上', x: 0, y: -1 },
@@ -185,6 +206,7 @@ export default class RescueScene extends Phaser.Scene {
     this.load.audio('a43_action_error', `${a}/43_action_error.mp3`);
     this.load.audio('a47_success', `${a}/47_success.mp3`);
     this.load.audio('a48_flower', `${a}/48_flower.mp3`);
+    this.load.audio('l1_game_bgm', `${a}/game_bgm.mp3`);
   }
 
   create() {
@@ -196,13 +218,22 @@ export default class RescueScene extends Phaser.Scene {
     this.drawStaticLayout();
     this.revealInitialArea();
     this.refreshScene();
+    this.startGameBgm();
     this.showSafetyCard();
+
+    this.events.once('shutdown', () => this.stopLevelAudio());
+    this.events.once('destroy', () => this.stopLevelAudio());
   }
 
   resetState() {
+    const replayUnlocked = this.hasClearedLevelOne();
+    const fireSeed = Math.floor(Math.random() * 100000);
+    const panicScriptIndex = replayUnlocked ? fireSeed % PANIC_SCRIPT_VARIANTS.length : 0;
+
     this.state = {
       round: 1,
       ap: MAX_AP,
+      maxRound: MAX_ROUND,
       grandmaHp: 100,
       panic: 60,
       trust: 20,
@@ -226,15 +257,25 @@ export default class RescueScene extends Phaser.Scene {
       maskReminderRound: 0,
       severeErrors: 0,
       wrongActions: 0,
+      fireSeed,
+      panicSeed: Math.floor(Math.random() * 100000),
+      panicScriptIndex,
       fireExpansionIndex: 0,
       dynamicFire: new Set(),
+      dynamicSmoke: new Set(),
       pendingFireWarnings: [],
+      pendingSmokeWarnings: [],
       pendingGrandmaWarning: null,
       resolvingEnvironment: false,
       revealed: new Set(),
       player: { ...START.player },
       grandma: { ...START.grandma },
       playerTrail: [],
+      escortStartRound: null,
+      escortMoves: 0,
+      escortSmokeShifted: false,
+      escortReassuranceNeeded: false,
+      neighborAssistUsed: false,
       lastPlayerDirection: 'down',
       playerMotion: null,
       grandmaMotion: null,
@@ -252,8 +293,26 @@ export default class RescueScene extends Phaser.Scene {
     this.lastFeedback = null;
     this.smokeBurstTiles = [];
     this.modalOpen = false;
+    this.gameBgm = null;
+    this.lastChoiceRewardAt = 0;
     this.fireLoop = null;
     this.pendingAutoResolve = null;
+  }
+
+  hasClearedLevelOne() {
+    try {
+      return window.localStorage.getItem('helpharbour-level1-cleared') === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  markLevelOneCleared() {
+    try {
+      window.localStorage.setItem('helpharbour-level1-cleared', 'true');
+    } catch {
+      // Progress persistence is optional; replay variety should not block the result card.
+    }
   }
 
   createAnimations() {
@@ -594,13 +653,14 @@ export default class RescueScene extends Phaser.Scene {
   drawPendingWarnings() {
     const warnings = [
       ...this.state.pendingFireWarnings.map((pos) => ({ ...pos, type: 'fire' })),
+      ...this.state.pendingSmokeWarnings.map((pos) => ({ ...pos, type: 'smoke' })),
       ...(this.state.pendingGrandmaWarning ? [{ ...this.state.pendingGrandmaWarning, type: 'panic' }] : []),
     ];
 
     warnings.forEach((warning) => {
       const center = this.gridToCenter(warning.x, warning.y);
-      const color = warning.type === 'fire' ? COLORS.dangerOrange : COLORS.warmYellow;
-      const label = warning.type === 'fire' ? '火势预警' : '烟雾扰动';
+      const color = warning.type === 'fire' ? COLORS.dangerOrange : warning.type === 'smoke' ? COLORS.smokeGray : COLORS.warmYellow;
+      const label = warning.type === 'fire' ? '火势预警' : warning.type === 'smoke' ? '浓烟回压' : '烟雾扰动';
       const box = this.add.rectangle(center.x, center.y, TILE_W - 8, TILE_H - 8, color, 0.24).setStrokeStyle(4, color, 0.96);
       const text = this.add.text(center.x, center.y, label, rectTextStyle(13, CSS.white, { fontStyle: 'bold' })).setOrigin(0.5);
       this.objectLayer.add(box);
@@ -725,11 +785,14 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   drawNeighborSupport() {
-    if (!this.state.hasCalled119 || this.state.neighborAssigned || this.state.gameOver) return;
+    if (!this.state.hasCalled119 || this.state.gameOver) return;
     const center = this.gridToCenter(0, 4);
-    this.actorLayer.add(this.add.image(center.x - 6, center.y + 6, 'l1_neighbor').setDisplaySize(66, 84));
+    const assigned = this.state.neighborAssigned;
+    const neighbor = this.add.image(center.x - 6, center.y + 6, 'l1_neighbor').setDisplaySize(66, 84);
+    if (assigned) neighbor.setTint(0xb7f5a3);
+    this.actorLayer.add(neighbor);
     const bubble = this.add
-      .text(center.x + 76, center.y - 38, '我去楼道接应119', rectTextStyle(13, '#25384A', { fontStyle: 'bold', align: 'center', wordWrap: { width: 132 } }))
+      .text(center.x + 76, center.y - 38, assigned ? '我在这里接应' : '我去楼道接应119', rectTextStyle(13, '#25384A', { fontStyle: 'bold', align: 'center', wordWrap: { width: 132 } }))
       .setOrigin(0.5)
       .setPadding(8, 4, 8, 4)
       .setBackgroundColor('rgba(255,255,255,0.95)');
@@ -879,6 +942,16 @@ export default class RescueScene extends Phaser.Scene {
       };
     }
 
+    if (this.state.escortReassuranceNeeded) {
+      return {
+        actionId: 'care',
+        intent: 'care',
+        target: this.state.grandma,
+        title: '建议：先安抚',
+        body: '浓烟回压，她需要确认方向。',
+      };
+    }
+
     if (this.state.escortMode) {
       return {
         actionId: 'move',
@@ -977,7 +1050,10 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   getNextStepTowardSafeZone() {
-    const path = this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false });
+    const saferPath = this.state.escortMode
+      ? this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false, avoidHeavySmoke: true })
+      : [];
+    const path = saferPath.length > 0 ? saferPath : this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false });
     return path[1] ?? this.state.player;
   }
 
@@ -1029,10 +1105,11 @@ export default class RescueScene extends Phaser.Scene {
       .filter((candidate) => this.isWalkableForPlayer(candidate, options));
   }
 
-  isWalkableForPlayer(pos, { allowGrandma = true } = {}) {
+  isWalkableForPlayer(pos, { allowGrandma = true, avoidHeavySmoke = false } = {}) {
     if (!inBounds(pos.x, pos.y)) return false;
     if (!allowGrandma && isSame(pos, this.state.grandma)) return false;
     const kind = this.getTileKind(pos.x, pos.y);
+    if (avoidHeavySmoke && kind === 'HSMK') return false;
     return !['WALL', 'FIRE', 'OBS', 'OBJ'].includes(kind);
   }
 
@@ -1052,7 +1129,8 @@ export default class RescueScene extends Phaser.Scene {
     // 2. 自动寻路并指出避开火焰的最优路径
     let path = [];
     if (this.state.escortMode) {
-      path = this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false });
+      path = this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false, avoidHeavySmoke: true });
+      if (path.length === 0) path = this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false });
     } else {
       path = this.findPath(this.state.player, (pos) => isSame(pos, this.state.grandma), { allowGrandma: false });
     }
@@ -1156,7 +1234,7 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   updateHud() {
-    this.roundText.setText(`回合 ${this.state.round}/${MAX_ROUND}`);
+    this.roundText.setText(`回合 ${this.state.round}/${this.state.maxRound}`);
     this.apText.setText(`${this.state.ap}/${MAX_AP}`);
     this.hpText.setText(`王奶奶生命 ${Math.round(this.state.grandmaHp)}`);
     this.panicText.setText(`恐慌值 ${this.state.panic}`);
@@ -1230,6 +1308,7 @@ export default class RescueScene extends Phaser.Scene {
     if (this.canCalmGrandma()) return '安抚沟通';
     if (this.canMaskGrandma()) return '给她面罩';
     if (this.canStartEscort()) return '引导撤离';
+    if (this.state.escortReassuranceNeeded) return '安抚跟随';
     if (this.state.escortMode) return '等她跟上';
     return '沟通护送';
   }
@@ -1243,6 +1322,7 @@ export default class RescueScene extends Phaser.Scene {
     if (this.canCalmGrandma()) return '蹲下慢说';
     if (this.canMaskGrandma()) return '降低烟雾伤害';
     if (this.canStartEscort()) return '进入跟随状态';
+    if (this.state.escortReassuranceNeeded) return '浓烟回压';
     if (this.state.escortMode) return '修正距离';
     return '先找到王奶奶';
   }
@@ -1514,16 +1594,71 @@ export default class RescueScene extends Phaser.Scene {
 
   handleEscortFollow(previousPlayerPos) {
     if (!this.state.escortMode) return;
+    if (this.state.escortReassuranceNeeded) {
+      this.setHuahua('浓烟压回来，王奶奶有点停住了。用“沟通护送”再安抚一下，再继续带她走。', 'hint');
+      return;
+    }
 
     if (this.isPositionSafeForGrandma(previousPlayerPos)) {
       const previousGrandma = { ...this.state.grandma };
       this.state.grandma = { ...previousPlayerPos };
       this.state.grandmaMotion = { from: previousGrandma, to: previousPlayerPos, startedAt: this.time.now, duration: 170 };
       this.revealAround(this.state.grandma, 1);
+      this.state.escortMoves += 1;
       this.setHuahua('很好，她正跟着你。别走太快，尽量把路线带向左侧安全区。', 'encourage');
     } else {
       this.setHuahua('王奶奶不愿经过危险格。换一条更安全的路线，或先清理障碍。', 'hint');
     }
+
+    this.maybeTriggerEscortSmokeShift();
+    this.maybeNeighborAssist();
+  }
+
+  maybeTriggerEscortSmokeShift() {
+    if (!this.state.escortMode || this.state.escortSmokeShifted || this.state.escortMoves < 2) return;
+
+    const shiftedTiles = ESCORT_SMOKE_SHIFT_TILES.filter((pos) => this.canBecomeDynamicSmoke(pos));
+    if (shiftedTiles.length === 0) return;
+
+    this.state.escortSmokeShifted = true;
+    this.state.escortReassuranceNeeded = true;
+    this.state.pendingSmokeWarnings = shiftedTiles;
+    shiftedTiles.forEach((pos) => {
+      this.state.dynamicSmoke.add(keyOf(pos.x, pos.y));
+      this.reveal(pos.x, pos.y);
+      this.smokeBurstTiles.push(pos);
+    });
+    this.playSfx('a39_smoke_expand', 0.42);
+    this.setHuahua('回程的烟雾压回来了，原路不一定最稳。先安抚王奶奶，再考虑从下侧绕开浓烟。', 'hint');
+
+    this.time.delayedCall(900, () => {
+      if (this.state.gameOver) return;
+      this.state.pendingSmokeWarnings = [];
+      this.refreshScene();
+    });
+  }
+
+  canBecomeDynamicSmoke(pos) {
+    if (!inBounds(pos.x, pos.y) || isSame(pos, this.state.player) || isSame(pos, this.state.grandma)) return false;
+    const kind = this.getTileKind(pos.x, pos.y);
+    return ['KIT', 'SMK'].includes(kind);
+  }
+
+  maybeNeighborAssist() {
+    if (!this.state.neighborAssigned || this.state.neighborAssistUsed || !this.state.escortMode) return;
+    if (inSafeZone(this.state.grandma) || this.state.grandma.x > 2 || this.state.grandma.y < 3 || this.state.grandma.y > 5) return;
+
+    const previousGrandma = { ...this.state.grandma };
+    const primaryTarget = { x: 1, y: this.state.grandma.y };
+    const target = isSame(primaryTarget, this.state.player) ? { x: 0, y: this.state.grandma.y } : primaryTarget;
+    if (isSame(target, this.state.player) || (!this.isPositionSafeForGrandma(target) && !inSafeZone(target))) return;
+
+    this.state.grandma = target;
+    this.state.grandmaMotion = { from: previousGrandma, to: target, startedAt: this.time.now, duration: 170 };
+    this.state.neighborAssistUsed = true;
+    this.state.panic = clamp(this.state.panic - 10, 0, 100);
+    this.revealAround(target, 1);
+    this.setHuahua('邻居在楼道口接住了王奶奶，最后几步更稳了。继续把人带到安全区。', 'encourage');
   }
 
   handleSceneAction() {
@@ -1561,6 +1696,11 @@ export default class RescueScene extends Phaser.Scene {
 
     if (this.canStartEscort()) {
       this.showEscortCard();
+      return;
+    }
+
+    if (this.state.escortReassuranceNeeded) {
+      this.reassureGrandmaDuringEscort();
       return;
     }
 
@@ -1615,10 +1755,16 @@ export default class RescueScene extends Phaser.Scene {
           recommended: isFridge || this.state.round <= 6,
           onSelect: () => {
             if (!this.spendAP(2)) return;
-            if (isFridge) this.state.clearedFridge = true;
-            else this.state.clearedShelf = true;
+            if (isFridge) {
+              this.state.clearedFridge = true;
+              this.state.grandmaHp = clamp(this.state.grandmaHp + 5, 0, 100);
+            } else {
+              this.state.clearedShelf = true;
+              this.state.fireRisk = clamp(this.state.fireRisk - 5, 0, 100);
+              this.state.foundValve = true;
+            }
             this.playSfx('a41_clear_obstacle', 0.75);
-            this.setHuahua('清开了。路线更通畅，但也要记得还剩多少行动力。', 'encourage');
+            this.setHuahua(isFridge ? '清开冰箱时找到一条湿毛巾，护送容错提高了。继续确认王奶奶的位置。' : '清开储物架后通风更顺，火场风险略降，也能接近燃气阀门了。', 'encourage');
             this.revealAround(obstacle.pos, 1);
             this.refreshScene();
             this.afterAction();
@@ -1765,6 +1911,9 @@ export default class RescueScene extends Phaser.Scene {
           onSelect: () => {
             if (!this.spendAP(1)) return;
             this.state.escortMode = true;
+            this.state.escortStartRound = this.state.round;
+            this.state.escortMoves = 0;
+            this.state.maxRound = Math.max(this.state.maxRound, this.state.round + ESCORT_BONUS_ROUNDS);
             this.setHuahua('现在她会跟着你走。不要穿过火焰，尽量避开浓烟。', 'encourage');
             this.refreshScene();
             this.afterAction();
@@ -1793,6 +1942,29 @@ export default class RescueScene extends Phaser.Scene {
 
     this.state.panic = clamp(this.state.panic - 5, 0, 100);
     this.setHuahua('你放慢了脚步，她跟得更稳。继续往左侧安全区走。', 'encourage');
+    this.maybeNeighborAssist();
+    this.refreshScene();
+    this.checkSuccess();
+    this.afterAction();
+  }
+
+  reassureGrandmaDuringEscort() {
+    if (!this.spendAP(1)) return;
+
+    this.state.escortReassuranceNeeded = false;
+    this.state.panic = clamp(this.state.panic - (this.state.neighborAssigned ? 15 : 10), 0, 100);
+
+    if (distance(this.state.player, this.state.grandma) > 1 && this.state.playerTrail.length > 0) {
+      const target = this.state.playerTrail[this.state.playerTrail.length - 1];
+      if (this.isPositionSafeForGrandma(target)) {
+        const previousGrandma = { ...this.state.grandma };
+        this.state.grandma = { ...target };
+        this.state.grandmaMotion = { from: previousGrandma, to: target, startedAt: this.time.now, duration: 170 };
+      }
+    }
+
+    this.setHuahua(this.state.neighborAssigned ? '你放慢语速，邻居也在出口呼应，王奶奶重新跟上了。' : '你重新说明方向，让王奶奶看着你走，她稳定下来了。', 'encourage');
+    this.maybeNeighborAssist();
     this.refreshScene();
     this.checkSuccess();
     this.afterAction();
@@ -1882,7 +2054,7 @@ export default class RescueScene extends Phaser.Scene {
       this.state.huahuaCooldown -= 1;
     }
 
-    if (this.state.round > MAX_ROUND) {
+    if (this.state.round > this.state.maxRound) {
       this.finish(false, '救援窗口已经错过。下次可以减少无效移动，把行动力优先用在观察、安抚和撤离上。');
       return;
     }
@@ -1915,7 +2087,68 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   getNextFireTarget() {
-    return FIRE_SEQUENCE[this.state.fireExpansionIndex] ?? null;
+    while (this.state.fireExpansionIndex < FIRE_SEQUENCE.length) {
+      const scripted = FIRE_SEQUENCE[this.state.fireExpansionIndex];
+      if (this.canIgnite(scripted)) return scripted;
+      this.state.fireExpansionIndex += 1;
+    }
+
+    return this.getDynamicFireTarget();
+  }
+
+  getDynamicFireTarget() {
+    const seen = new Set();
+    const candidates = this.getCurrentFireTiles()
+      .flatMap((tile) => Object.values(DIRS).map((dir) => ({ x: tile.x + dir.x, y: tile.y + dir.y })))
+      .filter((pos) => {
+        const key = keyOf(pos.x, pos.y);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return this.canIgnite(pos);
+      })
+      .sort((a, b) => {
+        const priorityA = this.getFireSpreadPriority(a);
+        const priorityB = this.getFireSpreadPriority(b);
+        if (priorityA !== priorityB) return priorityA - priorityB;
+        return keyOf(a.x, a.y).localeCompare(keyOf(b.x, b.y));
+      });
+
+    if (candidates.length === 0) return null;
+    const index = (this.state.fireSeed + this.state.round * 7 + this.state.fireExpansionIndex * 13) % candidates.length;
+    return candidates[index];
+  }
+
+  getCurrentFireTiles() {
+    const tiles = [];
+    RAW_GRID.forEach((row, y) => {
+      row.forEach((mark, x) => {
+        if (mark === 'FIRE') tiles.push({ x, y });
+      });
+    });
+    this.state.dynamicFire.forEach((key) => {
+      const [x, y] = key.split(',').map(Number);
+      tiles.push({ x, y });
+    });
+    return tiles;
+  }
+
+  getFireSpreadPriority(pos) {
+    const kind = this.getTileKind(pos.x, pos.y);
+    if (kind === 'HSMK') return 0;
+    if (kind === 'SMK') return 1;
+    return 2;
+  }
+
+  canIgnite(pos) {
+    if (!inBounds(pos.x, pos.y) || isSame(pos, this.state.player) || isSame(pos, this.state.grandma)) return false;
+    if (this.isProtectedFireTile(pos)) return false;
+    return ['KIT', 'SMK', 'HSMK'].includes(this.getTileKind(pos.x, pos.y));
+  }
+
+  isProtectedFireTile(pos) {
+    if (inSafeZone(pos)) return true;
+    if (pos.x <= 2 && pos.y >= 3 && pos.y <= 5) return true;
+    return isSame(pos, POSITIONS.mask) || isSame(pos, POSITIONS.fridge);
   }
 
   expandFire() {
@@ -1949,7 +2182,7 @@ export default class RescueScene extends Phaser.Scene {
 
   getPanickedGrandmaTarget() {
     if (this.state.isCalmed || this.state.escortMode) return null;
-    const scripted = PANIC_SCRIPT.get(this.state.round);
+    const scripted = this.getScriptedPanicTarget();
     if (scripted && distance(this.state.grandma, scripted) === 1 && this.isPositionAllowedForPanic(scripted)) {
       return scripted;
     }
@@ -1963,7 +2196,14 @@ export default class RescueScene extends Phaser.Scene {
         return distance(a, this.state.player) - distance(b, this.state.player);
       });
 
-    return candidates[0] ?? null;
+    const pool = candidates.slice(0, Math.min(2, candidates.length));
+    if (pool.length === 0) return null;
+    return pool[(this.state.panicSeed + this.state.round) % pool.length];
+  }
+
+  getScriptedPanicTarget() {
+    const script = PANIC_SCRIPT_VARIANTS[this.state.panicScriptIndex] ?? PANIC_SCRIPT;
+    return script.get(this.state.round) ?? null;
   }
 
   finish(success, reason) {
@@ -1971,6 +2211,7 @@ export default class RescueScene extends Phaser.Scene {
     this.state.gameOver = true;
     this.closeModal();
     if (success) {
+      this.markLevelOneCleared();
       this.playSfx('a47_success', 0.78);
       this.time.delayedCall(450, () => this.playSfx('a48_flower', 0.72));
       this.setHuahua('成功撤离。你做到了安全、耐心、有效。', 'relieved');
@@ -2038,9 +2279,9 @@ export default class RescueScene extends Phaser.Scene {
     if (this.state.hasMask) score += 7;
     if (this.state.grandmaMasked) score += 7;
     if (this.state.gasClosed) score += 4;
-    if (this.state.neighborAssigned) score += 3;
+    if (this.state.neighborAssigned) score += this.state.neighborAssistUsed ? 6 : 4;
     if (this.state.usedObserve) score += 2;
-    score += clamp(12 - this.state.round, 0, 10);
+    score += clamp(this.state.maxRound - this.state.round, 0, 10);
     score -= this.state.wrongActions * 4;
     score -= this.state.severeErrors * 20;
     return clamp(score, 0, 100);
@@ -2073,6 +2314,14 @@ export default class RescueScene extends Phaser.Scene {
   showDecisionCard({ title, body, options, persist = false }) {
     this.modalLayer.removeAll(true);
     this.modalOpen = true;
+    const wrappedOptions = options.map((option) => ({
+      ...option,
+      onSelect: () => {
+        this.startGameBgm();
+        if (this.shouldPlayChoiceReward(option, persist)) this.playChoiceRewardSfx();
+        option.onSelect?.();
+      },
+    }));
 
     drawDecisionOverlay(this, {
       layer: this.modalLayer,
@@ -2080,7 +2329,7 @@ export default class RescueScene extends Phaser.Scene {
       height: HEIGHT,
       title,
       body,
-      options,
+      options: wrappedOptions,
       persist,
     });
   }
@@ -2310,14 +2559,16 @@ export default class RescueScene extends Phaser.Scene {
 
   getTileKind(x, y) {
     if (!inBounds(x, y)) return 'WALL';
-    if (this.state.dynamicFire.has(keyOf(x, y))) return 'FIRE';
+    const key = keyOf(x, y);
+    if (this.state.dynamicFire.has(key)) return 'FIRE';
 
     const mark = RAW_GRID[y][x];
-    if (mark === 'FIRE') return 'FIRE';
-    if (isSame({ x, y }, POSITIONS.fridge) && !this.state.clearedFridge) return 'OBS';
-    if (isSame({ x, y }, POSITIONS.shelf) && !this.state.clearedShelf) return 'OBS';
-    if (isSame({ x, y }, POSITIONS.valve)) return 'OBJ';
-    return mapMarkToBase(mark);
+    let kind = mark === 'FIRE' ? 'FIRE' : mapMarkToBase(mark);
+    if (isSame({ x, y }, POSITIONS.fridge) && !this.state.clearedFridge) kind = 'OBS';
+    if (isSame({ x, y }, POSITIONS.shelf) && !this.state.clearedShelf) kind = 'OBS';
+    if (isSame({ x, y }, POSITIONS.valve)) kind = 'OBJ';
+    if (this.state.dynamicSmoke.has(key) && ['KIT', 'SMK'].includes(kind)) return 'HSMK';
+    return kind;
   }
 
   getTileStyle(kind, visible) {
@@ -2371,10 +2622,60 @@ export default class RescueScene extends Phaser.Scene {
     };
   }
 
+  startGameBgm() {
+    try {
+      CONFLICTING_BGM_KEYS.forEach((key) => this.sound.stopByKey?.(key));
+      if (!this.gameBgm) {
+        this.sound.stopByKey?.('l1_game_bgm');
+        this.gameBgm = this.sound.add('l1_game_bgm', { loop: true, volume: 0.18 });
+      }
+      if (!this.gameBgm.isPlaying) this.gameBgm.play();
+    } catch {
+      // Browser autoplay policies can block BGM before the first user gesture.
+    }
+  }
+
+  stopGameBgm() {
+    try {
+      if (this.gameBgm?.isPlaying) this.gameBgm.stop();
+      this.gameBgm?.destroy?.();
+      this.gameBgm = null;
+    } catch {
+      // Leaving the scene should continue even if audio cleanup fails.
+    }
+  }
+
+  stopFireLoop() {
+    try {
+      if (this.fireLoop?.isPlaying) this.fireLoop.stop();
+      this.fireLoop?.destroy?.();
+      this.fireLoop = null;
+    } catch {
+      // Ambience is optional.
+    }
+  }
+
+  stopLevelAudio() {
+    this.stopGameBgm();
+    this.stopFireLoop();
+  }
+
+  shouldPlayChoiceReward(option, persist) {
+    if (persist || option.disabled || option.danger) return false;
+    return Boolean(option.recommended);
+  }
+
+  playChoiceRewardSfx() {
+    const now = this.time.now;
+    if (now - (this.lastChoiceRewardAt ?? 0) < 160) return;
+    this.lastChoiceRewardAt = now;
+    this.playSfx('a48_flower', 0.62);
+  }
+
   startFireLoop() {
     try {
       if (!this.fireLoop) {
-        this.fireLoop = this.sound.add('a38_fire_loop', { loop: true, volume: 0.22 });
+        this.fireLoop = this.sound.add('a38_fire_loop', { loop: true, volume: 0.12 });
       }
       if (!this.fireLoop.isPlaying) this.fireLoop.play();
     } catch {

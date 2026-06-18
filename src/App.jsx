@@ -48,7 +48,7 @@ function HomeScreen({ onOpenLevels }) {
   return (
     <main className="home-screen">
       <section className="home-hero" aria-label="红花救援队首页">
-        <video className="home-hero-art" autoPlay muted loop playsInline poster="/assets/ui/home-hero.png" aria-hidden="true">
+        <video className="home-hero-art" autoPlay muted loop playsInline aria-hidden="true">
           <source src="/assets/ui/herovideo.mp4" type="video/mp4" />
         </video>
 

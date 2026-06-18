@@ -57,7 +57,7 @@ while ((match = loadRegex.exec(scene))) {
   });
 }
 
-assert(loadedAssets.length === 40, `Expected 40 level1 load calls, found ${loadedAssets.length}.`);
+assert(loadedAssets.length === 41, `Expected 41 level1 load calls, found ${loadedAssets.length}.`);
 for (const asset of loadedAssets) {
   assert(fs.existsSync(asset.path), `Missing asset for ${asset.key}: ${asset.path}`);
 }
@@ -74,6 +74,8 @@ const requiredSceneChecks = {
   'gas valve': /showValveCard\(\)/.test(scene) && /gasClosed/.test(scene),
   'fire expansion': /FIRE_SEQUENCE/.test(scene) && /expandFire\(\)/.test(scene),
   'A43 error feedback': /a43_action_error/.test(scene),
+  'game BGM loop': /l1_game_bgm/.test(scene) && /startGameBgm\(\)/.test(scene) && /stopGameBgm\(\)/.test(scene),
+  'choice reward SFX': /shouldPlayChoiceReward/.test(scene) && /playChoiceRewardSfx/.test(scene),
 };
 
 for (const [label, passed] of Object.entries(requiredSceneChecks)) {
@@ -101,16 +103,16 @@ for (const pattern of forbiddenResourcePatterns) {
 
 const publicLevel1Files = walkFiles(level1Public);
 const distLevel1Files = walkFiles(level1Dist);
-assert(publicLevel1Files.length === 39, `Expected 39 public level1 files, found ${publicLevel1Files.length}.`);
+assert(publicLevel1Files.length === 40, `Expected 40 public level1 files, found ${publicLevel1Files.length}.`);
 
 if (fs.existsSync('dist')) {
-  assert(distLevel1Files.length === 39, `Expected 39 dist level1 files, found ${distLevel1Files.length}.`);
+  assert(distLevel1Files.length === 40, `Expected 40 dist level1 files, found ${distLevel1Files.length}.`);
   assert(!fs.existsSync(path.join('dist', 'assets', 'sprites')), 'dist/assets/sprites should not exist.');
 
-  const distForbiddenFiles = walkFiles(path.join('dist', 'assets')).filter((filePath) =>
+  const distForbiddenFiles = walkFiles(level1Dist).filter((filePath) =>
     /sprites|aed|cpr|18_/i.test(filePath),
   );
-  assert(distForbiddenFiles.length === 0, `Forbidden files in dist/assets: ${distForbiddenFiles.join(', ')}`);
+  assert(distForbiddenFiles.length === 0, `Forbidden files in dist/assets/level1: ${distForbiddenFiles.join(', ')}`);
 }
 
 if (failures.length > 0) {
