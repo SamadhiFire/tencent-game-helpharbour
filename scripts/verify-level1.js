@@ -38,6 +38,7 @@ const assetDirs = {
   '${c}': path.join(level1Public, 'characters').replaceAll('\\', '/'),
   '${i}': path.join(level1Public, 'items').replaceAll('\\', '/'),
   '${a}': path.join(level1Public, 'audio').replaceAll('\\', '/'),
+  '${sharedCharacters}': path.join('public', 'assets', 'level2', 'characters').replaceAll('\\', '/'),
 };
 
 const loadRegex = /this\.load\.(image|audio)\('([^']+)', `([^`]+)`\)/g;
@@ -56,7 +57,7 @@ while ((match = loadRegex.exec(scene))) {
   });
 }
 
-assert(loadedAssets.length === 39, `Expected 39 level1 load calls, found ${loadedAssets.length}.`);
+assert(loadedAssets.length === 40, `Expected 40 level1 load calls, found ${loadedAssets.length}.`);
 for (const asset of loadedAssets) {
   assert(fs.existsSync(asset.path), `Missing asset for ${asset.key}: ${asset.path}`);
 }

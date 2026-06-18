@@ -86,6 +86,12 @@ const FIRE_SEQUENCE = [
   { x: 6, y: 5 },
 ];
 
+const PANIC_SCRIPT = new Map([
+  [2, { x: 7, y: 5 }],
+  [4, { x: 7, y: 6 }],
+  [6, { x: 8, y: 6 }],
+]);
+
 const DIRS = {
   up: { label: '向上', x: 0, y: -1 },
   down: { label: '向下', x: 0, y: 1 },
@@ -133,6 +139,7 @@ export default class RescueScene extends Phaser.Scene {
     const c = `${LEVEL_ASSET}/characters`;
     const i = `${LEVEL_ASSET}/items`;
     const a = `${LEVEL_ASSET}/audio`;
+    const sharedCharacters = '/assets/level2/characters';
 
     this.load.image('player_idle', `${c}/01_player_idle.png`);
     this.load.image('player_walk_up_1', `${c}/01_player_walk_up_1.png`);
@@ -160,6 +167,7 @@ export default class RescueScene extends Phaser.Scene {
     this.load.image('huahua_hint', `${c}/02_huahua_hint.png`);
     this.load.image('huahua_encourage', `${c}/02_huahua_encourage.png`);
     this.load.image('huahua_relieved', `${c}/02_huahua_relieved.png`);
+    this.load.image('l1_neighbor', `${sharedCharacters}/bystander_a_idle.png`);
 
     this.load.image('mask_grid', `${i}/12_mask_grid.png`);
     this.load.image('mask_thumb', `${i}/12_mask_thumbnail.png`);
@@ -184,8 +192,8 @@ export default class RescueScene extends Phaser.Scene {
     this.createAnimations();
 
     this.cameras.main.setBackgroundColor('#080c10');
-    this.drawStaticLayout();
     this.createLayers();
+    this.drawStaticLayout();
     this.revealInitialArea();
     this.refreshScene();
     this.showSafetyCard();
@@ -212,25 +220,40 @@ export default class RescueScene extends Phaser.Scene {
       foundGrandma: false,
       heardGrandma: false,
       enteredKitchen: false,
-      returnedForItems: false,
+
       usedObserve: false,
+      lastObservedFrom: null,
+      maskReminderRound: 0,
       severeErrors: 0,
       wrongActions: 0,
       fireExpansionIndex: 0,
       dynamicFire: new Set(),
+      pendingFireWarnings: [],
+      pendingGrandmaWarning: null,
+      resolvingEnvironment: false,
       revealed: new Set(),
       player: { ...START.player },
       grandma: { ...START.grandma },
       playerTrail: [],
+      lastPlayerDirection: 'down',
+      playerMotion: null,
+      grandmaMotion: null,
+      neighborAssigned: false,
       actionMode: 'move',
       gameOver: false,
     };
 
+    this.state.huahuaCooldown = 0;
+    this.state.huahuaGuidancePath = null;
+
     this.huahuaMood = 'normal';
     this.huahuaTitle = '当前目标';
     this.huahuaText = '王奶奶家厨房冒烟了。先别急，第一步是判断现场安全并呼叫119。';
+    this.lastFeedback = null;
+    this.smokeBurstTiles = [];
     this.modalOpen = false;
     this.fireLoop = null;
+    this.pendingAutoResolve = null;
   }
 
   createAnimations() {
@@ -256,24 +279,25 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   drawStaticLayout() {
-    this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x070b0f);
-    this.add.rectangle(WIDTH / 2, 450, WIDTH, 900, 0x000000, 0.18);
-    this.add.rectangle(WIDTH / 2, 430, WIDTH, 688, 0x141719, 0.98);
-    this.add.rectangle(WIDTH / 2, 44, WIDTH, 88, 0x101820, 0.99).setStrokeStyle(2, 0x34404a, 0.9);
-    this.add.rectangle(WIDTH / 2, 815, WIDTH, 170, 0x0d141a, 0.97).setStrokeStyle(2, 0x27323a, 0.9);
-    this.add.rectangle(WIDTH / 2, 730, WIDTH, 2, 0xf6c85f, 0.28);
+    const bg1 = this.add.rectangle(WIDTH / 2, HEIGHT / 2, WIDTH, HEIGHT, 0x070b0f);
+    const bg2 = this.add.rectangle(WIDTH / 2, 450, WIDTH, 900, 0x000000, 0.18);
+    const bg3 = this.add.rectangle(WIDTH / 2, 430, WIDTH, 688, 0xe6d5bd, 1); // 温暖木板底色
+    const bg4 = this.add.rectangle(WIDTH / 2, 44, WIDTH, 88, 0xf9f3e3, 1).setStrokeStyle(4, 0x3f2a23, 1); // 顶部栏奶油背景
+    const bg5 = this.add.rectangle(WIDTH / 2, 815, WIDTH, 170, 0xfcf5e8, 1).setStrokeStyle(4, 0x3f2a23, 1); // 底部栏温馨背景
+    const bg6 = this.add.rectangle(WIDTH / 2, 730, WIDTH, 4, 0x3f2a23, 1); // 咖啡色粗分割线
+    this.staticLayer.add([bg1, bg2, bg3, bg4, bg5, bg6]);
 
     this.drawTopHud();
     this.drawAssistantBubble();
-    this.drawUtilityButtons();
 
-    this.drawRoundedBox(106, 812, 168, 92, 0x121a21, 0.9, 0x4b5965, 2, 12);
-    this.add.text(42, 774, '行动卡', rectTextStyle(21, CSS.yellow, { fontStyle: 'bold' }));
+    const modeBg = this.drawRoundedBox(106, 812, 168, 92, 0xfffcf5, 1, 0x3f2a23, 3, 16);
+    const modeTitle = this.add.text(42, 774, '行动卡', rectTextStyle(21, '#e69c00', { fontStyle: 'bold' }));
     this.modeText = this.add.text(42, 804, '', {
-      ...rectTextStyle(15, '#D8E1E8'),
+      ...rectTextStyle(14, '#5C4338', { fontStyle: 'bold' }),
       lineSpacing: 4,
-      wordWrap: { width: 132 },
+      wordWrap: { width: 132, useAdvancedWrap: true },
     });
+    this.uiLayer.add([modeBg, modeTitle, this.modeText]);
   }
 
   drawRoundedBox(x, y, width, height, fill, alpha = 1, stroke = null, strokeWidth = 2, radius = 16) {
@@ -282,11 +306,12 @@ export default class RescueScene extends Phaser.Scene {
 
   drawTopHud() {
     const hud = drawSharedTopHud(this, {
+      layer: this.uiLayer,
       levelLabel: '关卡一',
       title: this.level?.title ?? '烟雾厨房里的王奶奶',
       emblem: '烟',
       metrics: [
-        { id: 'ap', label: '行动点', icon: 'AP', width: 150 },
+        { id: 'ap', label: '行动力', icon: '行', width: 150 },
         { id: 'hp', label: '王奶奶生命', icon: '命', width: 210, bar: true, barWidth: 118, intent: 'safe' },
         { id: 'panic', label: '情绪状态', icon: '慌', width: 176, intent: 'warn' },
         { id: 'risk', label: '火场风险', icon: '险', width: 176, intent: 'danger' },
@@ -316,6 +341,7 @@ export default class RescueScene extends Phaser.Scene {
 
   drawAssistantBubble() {
     const assistant = drawAssistantPanel(this, {
+      layer: this.uiLayer,
       avatarKey: 'huahua_normal',
       name: '花花',
     });
@@ -328,19 +354,32 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   drawUtilityButtons() {
+    this.utilityLayer?.removeAll(true);
+    const disabled = this.modalOpen || this.state.gameOver || this.state.resolvingEnvironment || !this.state.hasCalled119;
     drawSharedUtilityButtons(this, {
+      layer: this.utilityLayer,
       buttons: [
-        { icon: '↻', label: '回合结束', onClick: () => this.endTurn() },
+        {
+          icon: '↻',
+          label: '回合结束',
+          disabled,
+          onClick: () => this.endTurn(),
+          onDisabled: () => this.feedbackNotice(this.state.hasCalled119 ? '当前还不能结束回合。先处理打开的提示或等待环境结算。' : '先完成现场安全判断和119呼救，再进入回合行动。'),
+        },
       ],
     });
   }
 
   createLayers() {
+    this.staticLayer = this.add.container(); // 底层背景容器
     this.gridLayer = this.add.container();
     this.objectLayer = this.add.container();
     this.actorLayer = this.add.container();
     this.fogLayer = this.add.container();
+    this.guidanceLayer = this.add.container();
     this.actionLayer = this.add.container();
+    this.utilityLayer = this.add.container();
+    this.uiLayer = this.add.container(); // 顶层 UI 容器，防止被遮罩压暗
     this.modalLayer = this.add.container();
   }
 
@@ -364,8 +403,10 @@ export default class RescueScene extends Phaser.Scene {
     this.drawObjects();
     this.drawActors();
     this.drawFog();
+    this.drawGuidanceHints();
     this.updateHud();
     this.drawActionCards();
+    this.drawUtilityButtons();
   }
 
   drawGrid() {
@@ -502,16 +543,16 @@ export default class RescueScene extends Phaser.Scene {
       ['道具', COLORS.safeCyan],
     ];
 
-    const panel = this.drawRoundedBox(84, 586, 152, 206, 0x101820, 0.88, 0xa88a61, 2, 14);
+    const panel = this.drawRoundedBox(84, 586, 152, 206, 0xfffcf5, 1, 0x3f2a23, 3, 16); // 温暖便签纸
     this.gridLayer.add(panel);
-    const title = this.add.text(44, 500, '图例', rectTextStyle(20, '#F6E5C8', { fontStyle: 'bold' }));
+    const title = this.add.text(44, 496, '图例', rectTextStyle(18, '#3f2a23', { fontStyle: 'bold' }));
     this.gridLayer.add(title);
 
     legends.forEach(([label, color], index) => {
       const x = 52;
-      const y = 536 + index * 34;
-      const swatch = this.add.rectangle(x, y, 22, 22, color, 0.95).setStrokeStyle(2, 0xf6e5c8, 0.7);
-      const text = this.add.text(x + 28, y - 10, label, rectTextStyle(17, '#F6E5C8', { fontStyle: 'bold' }));
+      const y = 534 + index * 34;
+      const swatch = this.add.rectangle(x, y, 20, 20, color, 0.95).setStrokeStyle(2, 0x3f2a23, 1);
+      const text = this.add.text(x + 24, y - 10, label, rectTextStyle(15, '#5c4338', { fontStyle: 'bold' }));
       this.gridLayer.add(swatch);
       this.gridLayer.add(text);
     });
@@ -543,10 +584,29 @@ export default class RescueScene extends Phaser.Scene {
       }
     }
 
+    this.drawPendingWarnings();
     this.drawInteractable('fridge', POSITIONS.fridge, 'fallen_fridge', !this.state.clearedFridge, '冰箱');
     this.drawInteractable('shelf', POSITIONS.shelf, 'fallen_shelf', !this.state.clearedShelf, '储物架');
     this.drawInteractable('mask', POSITIONS.mask, 'mask_grid', !this.state.hasMask, '面罩');
     this.drawInteractable('valve', POSITIONS.valve, 'gas_valve', true, this.state.gasClosed ? '已关闭' : '阀门');
+  }
+
+  drawPendingWarnings() {
+    const warnings = [
+      ...this.state.pendingFireWarnings.map((pos) => ({ ...pos, type: 'fire' })),
+      ...(this.state.pendingGrandmaWarning ? [{ ...this.state.pendingGrandmaWarning, type: 'panic' }] : []),
+    ];
+
+    warnings.forEach((warning) => {
+      const center = this.gridToCenter(warning.x, warning.y);
+      const color = warning.type === 'fire' ? COLORS.dangerOrange : COLORS.warmYellow;
+      const label = warning.type === 'fire' ? '火势预警' : '烟雾扰动';
+      const box = this.add.rectangle(center.x, center.y, TILE_W - 8, TILE_H - 8, color, 0.24).setStrokeStyle(4, color, 0.96);
+      const text = this.add.text(center.x, center.y, label, rectTextStyle(13, CSS.white, { fontStyle: 'bold' })).setOrigin(0.5);
+      this.objectLayer.add(box);
+      this.objectLayer.add(text);
+      this.tweens.add({ targets: box, alpha: 0.08, yoyo: true, repeat: -1, duration: 220 });
+    });
   }
 
   drawInteractable(id, pos, texture, shouldShow, label) {
@@ -576,22 +636,60 @@ export default class RescueScene extends Phaser.Scene {
     this.objectLayer.add(chip);
   }
 
+  drawSmokeBursts() {
+    if (!this.smokeBurstTiles?.length) return;
+    this.smokeBurstTiles.forEach((pos) => {
+      const center = this.gridToCenter(pos.x, pos.y);
+      const burst = this.add.image(center.x, center.y, 'smoke_overlay').setDisplaySize(TILE_W * 2.2, TILE_H * 2).setAlpha(0.64);
+      this.objectLayer.add(burst);
+      this.tweens.add({ targets: burst, alpha: 0, scaleX: 1.28, scaleY: 1.28, duration: 900, ease: 'Sine.easeOut' });
+    });
+    this.smokeBurstTiles = [];
+  }
+
+  getMotionStart(motion, fallback) {
+    if (!motion) return this.gridToCenter(fallback.x, fallback.y);
+    const elapsed = this.time.now - motion.startedAt;
+    if (elapsed > motion.duration + 40) return this.gridToCenter(fallback.x, fallback.y);
+    return this.gridToCenter(motion.from.x, motion.from.y);
+  }
+
+  tweenMotion(object, motion, yOffset = 0) {
+    if (!motion) return;
+    const elapsed = this.time.now - motion.startedAt;
+    if (elapsed > motion.duration + 40) return;
+    const target = this.gridToCenter(motion.to.x, motion.to.y);
+    this.tweens.add({
+      targets: object,
+      x: target.x,
+      y: target.y + yOffset,
+      duration: Math.max(40, motion.duration - elapsed),
+      ease: 'Sine.easeOut',
+    });
+  }
+
   drawActors() {
     this.actorLayer.removeAll(true);
+    this.drawSmokeBursts();
 
-    const playerCenter = this.gridToCenter(this.state.player.x, this.state.player.y);
+    const playerCenter = this.getMotionStart(this.state.playerMotion, this.state.player);
     const playerKind = this.getTileKind(this.state.player.x, this.state.player.y);
     const playerRing = this.add
       .rectangle(playerCenter.x, playerCenter.y, TILE_W - 18, TILE_H - 12, COLORS.safeCyan, 0.18)
       .setStrokeStyle(3, COLORS.safeCyan, 0.95);
     const player = this.add.sprite(playerCenter.x, playerCenter.y + 4, 'player_idle').setDisplaySize(66, 76);
+    this.tweenMotion(playerRing, this.state.playerMotion);
+    this.tweenMotion(player, this.state.playerMotion, 4);
 
-    if (playerKind === 'SMK' || playerKind === 'HSMK' || this.state.actionMode === 'move') {
+    if (playerKind === 'SMK' || playerKind === 'HSMK') {
       player.play('player_crawl');
+    } else if (this.state.lastPlayerDirection) {
+      player.play(`player_walk_${this.state.lastPlayerDirection}`);
     }
 
     this.actorLayer.add(playerRing);
     this.actorLayer.add(player);
+    this.drawNeighborSupport();
 
     if (!this.isGrandmaVisible()) {
       if (this.state.heardGrandma && !this.state.foundGrandma) {
@@ -606,13 +704,15 @@ export default class RescueScene extends Phaser.Scene {
       return;
     }
 
-    const grandmaCenter = this.gridToCenter(this.state.grandma.x, this.state.grandma.y);
+    const grandmaCenter = this.getMotionStart(this.state.grandmaMotion, this.state.grandma);
     const ringColor = this.state.escortMode ? COLORS.safeGreen : this.state.isCalmed ? COLORS.warmYellow : COLORS.dangerOrange;
     const grandmaRing = this.add
       .rectangle(grandmaCenter.x, grandmaCenter.y, TILE_W - 18, TILE_H - 12, ringColor, 0.2)
       .setStrokeStyle(3, ringColor, 0.9);
 
     const grandma = this.add.sprite(grandmaCenter.x, grandmaCenter.y + 4, this.getGrandmaTexture()).setDisplaySize(68, 76);
+    this.tweenMotion(grandmaRing, this.state.grandmaMotion);
+    this.tweenMotion(grandma, this.state.grandmaMotion, 4);
     if (!this.state.isCalmed) {
       grandma.play('grandma_panic');
     } else if (this.state.escortMode) {
@@ -622,6 +722,18 @@ export default class RescueScene extends Phaser.Scene {
     this.actorLayer.add(grandmaRing);
     this.actorLayer.add(grandma);
     this.drawGrandmaStatus(grandmaCenter);
+  }
+
+  drawNeighborSupport() {
+    if (!this.state.hasCalled119 || this.state.neighborAssigned || this.state.gameOver) return;
+    const center = this.gridToCenter(0, 4);
+    this.actorLayer.add(this.add.image(center.x - 6, center.y + 6, 'l1_neighbor').setDisplaySize(66, 84));
+    const bubble = this.add
+      .text(center.x + 76, center.y - 38, '我去楼道接应119', rectTextStyle(13, '#25384A', { fontStyle: 'bold', align: 'center', wordWrap: { width: 132 } }))
+      .setOrigin(0.5)
+      .setPadding(8, 4, 8, 4)
+      .setBackgroundColor('rgba(255,255,255,0.95)');
+    this.actorLayer.add(bubble);
   }
 
   drawGrandmaStatus(center) {
@@ -663,67 +775,384 @@ export default class RescueScene extends Phaser.Scene {
     }
   }
 
+  drawGuidanceHints() {
+    this.guidanceLayer.removeAll(true);
+    if (this.state.gameOver) return;
+
+    if (!this.modalOpen && this.state.hasCalled119) {
+      const guidance = this.getCurrentGuidance();
+      if (guidance?.target) {
+        this.drawGuidanceTarget(guidance);
+      }
+    }
+
+    this.drawLatestFeedback();
+
+    if (this.state.huahuaGuidancePath && this.state.huahuaGuidancePath.length > 0) {
+      this.state.huahuaGuidancePath.forEach((step, idx) => {
+        if (idx === 0) return;
+        const center = this.gridToCenter(step.x, step.y);
+        const guideCircle = this.add.circle(center.x, center.y, 14, 0x2fbf7a, 0.44).setStrokeStyle(2, 0x3f2a23, 1);
+        this.guidanceLayer.add(guideCircle);
+        this.tweens.add({ targets: guideCircle, scaleX: 1.2, scaleY: 1.2, yoyo: true, repeat: -1, duration: 600 + idx * 50 });
+      });
+    }
+  }
+
+  drawGuidanceTarget(guidance) {
+    const center = this.gridToCenter(guidance.target.x, guidance.target.y);
+    const color = guidance.intent === 'care' ? COLORS.safeGreen : guidance.intent === 'scene' ? COLORS.warmYellow : COLORS.safeCyan;
+    const playerCenter = this.gridToCenter(this.state.player.x, this.state.player.y);
+
+    if (!isSame(guidance.target, this.state.player)) {
+      const line = this.add.line(0, 0, playerCenter.x, playerCenter.y, center.x, center.y, color, 0.72).setOrigin(0);
+      line.setLineWidth(4, 2);
+      this.guidanceLayer.add(line);
+    }
+
+    const halo = this.add.rectangle(center.x, center.y, TILE_W - 6, TILE_H - 6, color, 0.18).setStrokeStyle(4, color, 0.92);
+    const pulse = this.add.rectangle(center.x, center.y, TILE_W + 14, TILE_H + 12, color, 0.08).setStrokeStyle(3, color, 0.55);
+    this.guidanceLayer.add(halo);
+    this.guidanceLayer.add(pulse);
+    this.tweens.add({ targets: pulse, alpha: 0.02, scaleX: 1.08, scaleY: 1.12, yoyo: true, repeat: -1, duration: 760 });
+
+    const bubbleX = clamp(center.x + (guidance.bubbleDx ?? 0), 260, 1180);
+    const bubbleY = clamp(center.y + (guidance.bubbleDy ?? -76), 132, 650);
+    const guidanceTitle = guidance.actionId === 'observe' ? '点这里观察' : guidance.title;
+    const guidanceBody = guidance.actionId === 'observe' ? '点高亮方向格，或直接点下方观察。' : guidance.body;
+    const bubble = this.drawRoundedBox(bubbleX, bubbleY, 286, 74, 0xfffcf5, 1, color, 3, 16);
+    const title = this.add.text(bubbleX - 126, bubbleY - 26, guidanceTitle, rectTextStyle(17, '#3f2a23', { fontStyle: 'bold' }));
+    const body = this.add.text(bubbleX - 126, bubbleY + 2, guidanceBody, {
+      ...rectTextStyle(13, '#5c4338'),
+      lineSpacing: 4,
+      wordWrap: { width: 248, useAdvancedWrap: true },
+    });
+    this.guidanceLayer.add(bubble);
+    this.guidanceLayer.add(title);
+    this.guidanceLayer.add(body);
+  }
+
+  drawLatestFeedback() {
+    if (!this.lastFeedback || this.modalOpen) return;
+    const age = this.time.now - this.lastFeedback.stamp;
+    if (age > 2600) return;
+
+    const text = this.lastFeedback.text.length > 34 ? `${this.lastFeedback.text.slice(0, 34)}...` : this.lastFeedback.text;
+    const fill = this.lastFeedback.mood === 'encourage' || this.lastFeedback.mood === 'relieved' ? 0xeafdf0 : 0xffebea;
+    const stroke = 0x3f2a23; // 深大栗色描边
+    const alpha = age < 2100 ? 1 : 1 * (1 - (age - 2100) / 500);
+    const box = this.drawRoundedBox(720, 690, 650, 46, fill, alpha, stroke, 3, 16);
+    const label = this.add.text(410, 676, text, rectTextStyle(16, '#3f2a23', { fontStyle: 'bold' }));
+    label.setAlpha(alpha);
+    this.guidanceLayer.add(box);
+    this.guidanceLayer.add(label);
+  }
+
+  getCurrentGuidance() {
+    if (this.canCalmGrandma()) {
+      return {
+        actionId: 'care',
+        intent: 'care',
+        target: this.state.grandma,
+        title: '建议：安抚沟通',
+        body: '先说明身份，别直接拉她。',
+      };
+    }
+
+    if (this.canMaskGrandma()) {
+      return {
+        actionId: 'care',
+        intent: 'care',
+        target: this.state.grandma,
+        title: '建议：给她面罩',
+        body: '降低烟雾伤害再撤离。',
+      };
+    }
+
+    if (this.canStartEscort()) {
+      return {
+        actionId: 'care',
+        intent: 'care',
+        target: this.state.grandma,
+        title: '建议：引导撤离',
+        body: '让她跟随你往出口走。',
+      };
+    }
+
+    if (this.state.escortMode) {
+      return {
+        actionId: 'move',
+        intent: 'care',
+        target: this.getNextStepTowardSafeZone(),
+        title: '建议：带她往出口',
+        body: '每步都给她留安全位置。',
+      };
+    }
+
+    if (this.canPickupMask()) {
+      return {
+        actionId: 'scene',
+        intent: 'scene',
+        target: POSITIONS.mask,
+        title: '建议：拾取面罩',
+        body: '护送前先做好防护。',
+      };
+    }
+
+    const obstacle = this.getNearbyObstacle();
+    if (obstacle) {
+      return {
+        actionId: 'scene',
+        intent: 'scene',
+        target: obstacle.pos,
+        title: '建议：清除障碍',
+        body: '打开更稳的救援路线。',
+      };
+    }
+
+    if (this.canCloseValve()) {
+      return {
+        actionId: 'scene',
+        intent: 'scene',
+        target: POSITIONS.valve,
+        title: '可选：关闭阀门',
+        body: '安全有余力时再处理。',
+      };
+    }
+
+    if (this.state.foundMask && !this.state.hasMask) {
+      return {
+        actionId: 'move',
+        intent: 'scene',
+        target: POSITIONS.mask,
+        title: '建议：靠近面罩',
+        body: '站到面罩格后拾取。',
+      };
+    }
+
+    if (this.state.foundGrandma || this.isGrandmaVisible()) {
+      return {
+        actionId: 'move',
+        intent: 'care',
+        target: this.getBestNeighborOf(this.state.grandma) ?? this.state.grandma,
+        title: '建议：靠近王奶奶',
+        body: '停在相邻格再沟通。',
+      };
+    }
+
+    if (this.shouldSuggestObserve()) {
+      return {
+        actionId: 'observe',
+        intent: 'observe',
+        target: this.getForwardGuidanceTile(),
+        title: '建议：先观察',
+        body: '确认烟雾和路线后再走。',
+      };
+    }
+
+    return {
+      actionId: 'move',
+      intent: 'observe',
+      target: this.getForwardGuidanceTile(),
+      title: '建议：低姿前进',
+      body: '沿安全通道逐格推进。',
+    };
+  }
+
+  shouldSuggestObserve() {
+    const currentKey = keyOf(this.state.player.x, this.state.player.y);
+    if (this.state.lastObservedFrom === currentKey) return false;
+    const target = this.getForwardGuidanceTile();
+    return !isSame(target, this.state.player) && !this.isRevealed(target.x, target.y);
+  }
+
+  getForwardGuidanceTile() {
+    const candidates = [
+      { x: this.state.player.x + 1, y: this.state.player.y },
+      { x: this.state.player.x, y: this.state.player.y - 1 },
+      { x: this.state.player.x, y: this.state.player.y + 1 },
+      { x: this.state.player.x - 1, y: this.state.player.y },
+    ];
+    return candidates.find((pos) => inBounds(pos.x, pos.y) && this.isWalkableForPlayer(pos, { allowGrandma: false })) ?? this.state.player;
+  }
+
+  getNextStepTowardSafeZone() {
+    const path = this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false });
+    return path[1] ?? this.state.player;
+  }
+
+  getBestNeighborOf(pos) {
+    const candidates = Object.values(DIRS)
+      .map((dir) => ({ x: pos.x + dir.x, y: pos.y + dir.y }))
+      .filter((candidate) => inBounds(candidate.x, candidate.y) && this.isWalkableForPlayer(candidate, { allowGrandma: false }));
+    return candidates
+      .map((candidate) => ({
+        candidate,
+        path: this.findPath(this.state.player, (step) => isSame(step, candidate), { allowGrandma: false }),
+      }))
+      .filter((entry) => entry.path.length > 0)
+      .sort((a, b) => a.path.length - b.path.length)[0]?.candidate ?? null;
+  }
+
+  findPath(start, isGoal, options = {}) {
+    const queue = [{ ...start }];
+    const cameFrom = new Map([[keyOf(start.x, start.y), null]]);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (isGoal(current)) return this.reconstructPath(current, cameFrom);
+
+      this.getWalkableNeighbors(current, options).forEach((next) => {
+        const key = keyOf(next.x, next.y);
+        if (cameFrom.has(key)) return;
+        cameFrom.set(key, current);
+        queue.push(next);
+      });
+    }
+
+    return [];
+  }
+
+  reconstructPath(end, cameFrom) {
+    const path = [{ ...end }];
+    let cursor = cameFrom.get(keyOf(end.x, end.y));
+    while (cursor) {
+      path.unshift({ ...cursor });
+      cursor = cameFrom.get(keyOf(cursor.x, cursor.y));
+    }
+    return path;
+  }
+
+  getWalkableNeighbors(pos, options = {}) {
+    return Object.values(DIRS)
+      .map((dir) => ({ x: pos.x + dir.x, y: pos.y + dir.y }))
+      .filter((candidate) => this.isWalkableForPlayer(candidate, options));
+  }
+
+  isWalkableForPlayer(pos, { allowGrandma = true } = {}) {
+    if (!inBounds(pos.x, pos.y)) return false;
+    if (!allowGrandma && isSame(pos, this.state.grandma)) return false;
+    const kind = this.getTileKind(pos.x, pos.y);
+    return !['WALL', 'FIRE', 'OBS', 'OBJ'].includes(kind);
+  }
+
+  handleHuahuaHelp() {
+    if (!this.ensureCanAct(1)) return;
+    this.spendAP(1);
+    this.playSfx('a48_flower', 0.85);
+    this.state.huahuaCooldown = 3;
+
+    // 1. 瞬间驱散周围 3x3 迷雾
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        this.reveal(this.state.player.x + dx, this.state.player.y + dy);
+      }
+    }
+
+    // 2. 自动寻路并指出避开火焰的最优路径
+    let path = [];
+    if (this.state.escortMode) {
+      path = this.findPath(this.state.player, (pos) => inSafeZone(pos), { allowGrandma: false });
+    } else {
+      path = this.findPath(this.state.player, (pos) => isSame(pos, this.state.grandma), { allowGrandma: false });
+    }
+    this.state.huahuaGuidancePath = path;
+
+    this.setHuahua('花花闻到了安全路径！沿着发光的痕迹走，避开火势吧。', 'encourage', '花花指引');
+    this.refreshScene();
+  }
+
   drawActionCards() {
     this.actionLayer.removeAll(true);
+    const guidance = this.getCurrentGuidance();
 
     const cards = [
       {
+        id: 'observe',
         label: '观察',
-        cost: '1 AP',
+        cost: '消耗1点',
         note: '解锁方向视野',
         icon: '目',
         fill: 0x0f86de,
         stroke: 0x78d5ff,
-        recommended: !this.state.usedObserve,
-        onSelect: () => this.showObserveChoices(),
+        intent: 'tool',
+        recommended: guidance?.actionId === 'observe',
+        onSelect: () => this.handleObserveAction(guidance),
       },
       {
+        id: 'move',
         label: '低姿前进',
-        cost: '1 AP/格',
+        cost: '每格1点',
         note: '点击相邻格移动',
         icon: '行',
         fill: 0x27333e,
         stroke: 0xd7c8ad,
-        recommended: this.getTileKind(this.state.player.x, this.state.player.y) === 'SMK',
+        recommended: guidance?.actionId === 'move',
         onSelect: () => this.setMoveMode(),
       },
       {
+        id: 'scene',
         label: this.getSceneActionLabel(),
         cost: this.getSceneActionCost(),
         note: this.getSceneActionNote(),
         icon: this.hasSceneAction() ? '具' : '障',
         fill: this.canPickupMask() ? 0xd39320 : 0x9e551d,
         stroke: 0xffd586,
-        recommended: this.hasSceneAction(),
+        intent: 'tool',
+        recommended: guidance?.actionId === 'scene',
         onSelect: () => this.handleSceneAction(),
       },
       {
+        id: 'care',
         label: this.getCareActionLabel(),
         cost: this.getCareActionCost(),
         note: this.getCareActionNote(),
         icon: '心',
         fill: 0x4f9b3d,
         stroke: 0xb7f5a3,
-        recommended: this.hasCareAction(),
+        intent: 'support',
+        recommended: guidance?.actionId === 'care',
         onSelect: () => this.handleCareAction(),
+      },
+      {
+        id: 'huahua',
+        label: '花花求助',
+        cost: '消耗1点',
+        note: this.state.huahuaCooldown > 0 ? `冷却中 (${this.state.huahuaCooldown}回合)` : '驱散迷雾 & 指引路径',
+        icon: '助',
+        intent: 'support',
+        disabled: this.state.huahuaCooldown > 0,
+        onSelect: () => this.handleHuahuaHelp(),
       },
     ];
 
     drawActionDock(this, {
       layer: this.actionLayer,
       title: '救援行动',
-      startX: 220,
+      startX: 210,
       y: 816,
-      cardWidth: 254,
+      cardWidth: 184,
       cardHeight: 124,
-      gap: 18,
-      disabled: this.state.gameOver || this.modalOpen || !this.state.hasCalled119,
-      cards: cards.map((card, index) => ({
+      gap: 12,
+      disabled: this.state.gameOver || this.modalOpen || this.state.resolvingEnvironment || !this.state.hasCalled119,
+      cards: cards.map((card) => ({
         ...card,
-        intent: index === 2 ? 'tool' : index === 3 ? 'support' : undefined,
-        onDisabled: () => this.feedbackError(this.state.hasCalled119 ? '当前不能执行行动卡。' : '先完成现场安全判断和119呼救。'),
+        onDisabled: () => this.feedbackNotice(this.state.hasCalled119 ? '当前不能执行行动卡。' : '先完成现场安全判断和119呼救。'),
       })),
     });
+    this.drawMaskInventorySlot();
+  }
+
+  drawMaskInventorySlot() {
+    const x = 1338;
+    const y = 816;
+    const owned = this.state.hasMask || this.state.grandmaMasked;
+    this.actionLayer.add(this.drawRoundedBox(x, y, 132, 104, 0xfffcf5, 1, owned ? COLORS.safeCyan : 0x3f2a23, owned ? 4 : 3, 16));
+    this.actionLayer.add(this.add.text(x, y - 38, '防烟面罩', rectTextStyle(15, '#3f2a23', { fontStyle: 'bold' })).setOrigin(0.5));
+    const alpha = owned || this.state.foundMask ? 1 : 0.28;
+    this.actionLayer.add(this.add.image(x, y + 4, 'mask_thumb').setDisplaySize(58, 58).setAlpha(alpha));
+    const status = this.state.grandmaMasked ? '已给王奶奶' : this.state.hasMask ? '可使用' : this.state.foundMask ? '去拾取' : '未发现';
+    this.actionLayer.add(this.add.text(x, y + 42, status, rectTextStyle(12, owned ? '#2fbf7a' : '#8c7355', { fontStyle: 'bold' })).setOrigin(0.5));
   }
 
   updateHud() {
@@ -754,19 +1183,19 @@ export default class RescueScene extends Phaser.Scene {
       [this.state.gasClosed, '安全关闭燃气阀门'],
     ];
 
-    return checks.map(([done, label]) => `${done ? '[完成]' : '[进行]'} ${label}`).join('\n');
+    return checks.map(([done, label]) => `${done ? '✅' : '⬜'} ${label}`).join('\n');
   }
 
   getInventoryText() {
     const mask = this.state.grandmaMasked
-      ? '防烟面罩：已给王奶奶佩戴'
+      ? '😷 防烟面罩：已给王奶奶佩戴'
       : this.state.hasMask
-        ? '防烟面罩：已持有，可在王奶奶身边使用'
+        ? '😷 防烟面罩：已持有，可在她身边使用'
         : this.state.foundMask
-          ? '防烟面罩：已发现，站到格子上拾取'
-          : '防烟面罩：未发现';
-    const valve = this.state.gasClosed ? '燃气阀门：已关闭，火势扩散变慢' : '燃气阀门：可选目标，安全时再处理';
-    const danger = this.state.fireRisk >= 80 ? '风险提示：火场风险很高，优先撤离' : '风险提示：救人撤离优先于加分项';
+          ? '😷 防烟面罩：已发现，前去拾取'
+          : '😷 防烟面罩：未发现';
+    const valve = this.state.gasClosed ? '🔥 燃气阀门：已关闭，火势扩散变慢' : '🔥 燃气阀门：可选目标，安全时关闭';
+    const danger = this.state.fireRisk >= 80 ? '⚠️ 风险提示：火场风险很高，优先撤离' : '⚠️ 风险提示：救人撤离优先于加分项';
     return `${mask}\n${valve}\n${danger}`;
   }
 
@@ -784,9 +1213,9 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   getSceneActionCost() {
-    if (this.canPickupMask()) return '1 AP';
-    if (this.getNearbyObstacle()) return '2 AP';
-    if (this.canCloseValve()) return '1 AP';
+    if (this.canPickupMask()) return '消耗1点';
+    if (this.getNearbyObstacle()) return '消耗2点';
+    if (this.canCloseValve()) return '消耗1点';
     return '按条件触发';
   }
 
@@ -806,7 +1235,7 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   getCareActionCost() {
-    if (this.canCalmGrandma() || this.canMaskGrandma() || this.canStartEscort() || this.state.escortMode) return '1 AP';
+    if (this.canCalmGrandma() || this.canMaskGrandma() || this.canStartEscort() || this.state.escortMode) return '消耗1点';
     return '靠近触发';
   }
 
@@ -833,12 +1262,10 @@ export default class RescueScene extends Phaser.Scene {
       options: [
         {
           label: '判断现场安全并呼叫119',
-          note: '正确，消耗1 AP',
+          note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
-            if (!this.spendAP(1)) {
-              this.state.ap = 1;
-            }
+            this.spendAP(1);
             this.state.hasCalled119 = true;
             this.setHuahua('对，先确认还能安全接近，再让119和周围成年人在路上。现在低姿前进，必要时先观察。', 'encourage');
             this.refreshScene();
@@ -848,9 +1275,10 @@ export default class RescueScene extends Phaser.Scene {
           label: '直接冲进厨房',
           note: '错误，会增加火场风险',
           danger: true,
+          keepOpen: true,
           onSelect: () => {
             this.applyWrongAction('不可以盲目冲进浓烟。先判断风险，否则救人者也会遇险。', 10);
-            this.time.delayedCall(350, () => this.showSafetyCard());
+            this.showSafetyCard();
           },
         },
         {
@@ -858,7 +1286,7 @@ export default class RescueScene extends Phaser.Scene {
           note: '严重错误，直接失败',
           danger: true,
           onSelect: () => {
-            this.state.returnedForItems = true;
+
             this.state.severeErrors += 1;
             this.playSfx('a43_action_error', 0.75);
             this.finish(false, '火灾中不能返回取物。生命安全永远比物品更重要。');
@@ -868,32 +1296,48 @@ export default class RescueScene extends Phaser.Scene {
           label: '打开窗户大声喊',
           note: '部分错误，可能改变烟气流向',
           danger: true,
+          keepOpen: true,
           onSelect: () => {
             this.applyWrongAction('火场通风可能改变烟和火的流向。先呼救，再从安全路径接近。', 5);
-            this.time.delayedCall(350, () => this.showSafetyCard());
+            this.showSafetyCard();
           },
         },
       ],
     });
   }
 
-  showObserveChoices() {
+  enterObserveMode() {
     if (!this.ensureCanAct(1)) return;
     this.state.actionMode = 'observe';
-    this.showDecisionCard({
-      title: '观察哪个方向？',
-      body: '观察会消耗1 AP，解锁指定方向2格视野。持有面罩后，观察距离额外增加1格。',
-      options: Object.entries(DIRS).map(([dirKey, dir]) => ({
-        label: dir.label,
-        note: '消耗1 AP',
-        onSelect: () => this.observeDirection(dirKey),
-      })),
-    });
+    this.setHuahua('进入观察模式。直接点击人物相邻的方向格，花费1点行动力打开那一侧视野。', 'hint');
+    this.refreshScene();
+  }
+
+  handleObserveAction(guidance = this.getCurrentGuidance()) {
+    if (!this.ensureCanAct(1)) return;
+
+    if (guidance?.actionId === 'observe') {
+      const dirKey = this.getDirectionKeyTo(guidance.target);
+      if (dirKey) {
+        this.observeDirection(dirKey);
+        return;
+      }
+    }
+
+    this.enterObserveMode();
+  }
+
+  getDirectionKeyTo(pos) {
+    const dx = pos.x - this.state.player.x;
+    const dy = pos.y - this.state.player.y;
+    if (Math.abs(dx) + Math.abs(dy) !== 1) return null;
+    return Object.entries(DIRS).find(([, dir]) => dir.x === dx && dir.y === dy)?.[0] ?? null;
   }
 
   observeDirection(dirKey) {
     const dir = DIRS[dirKey];
     if (!dir || !this.spendAP(1)) return;
+    this.state.huahuaGuidancePath = null;
 
     const length = this.state.hasMask ? 3 : 2;
     for (let step = 1; step <= length; step += 1) {
@@ -906,6 +1350,7 @@ export default class RescueScene extends Phaser.Scene {
     }
 
     this.state.usedObserve = true;
+    this.state.lastObservedFrom = keyOf(this.state.player.x, this.state.player.y);
     this.state.actionMode = 'move';
     this.checkDiscoveries();
     this.setHuahua(this.getObserveFeedback(), 'hint');
@@ -920,18 +1365,20 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   handleTileClick(x, y) {
-    if (this.modalOpen || this.state.gameOver) return;
+    if (this.modalOpen || this.state.gameOver || this.state.resolvingEnvironment) return;
 
     if (!this.state.hasCalled119) {
       this.showSafetyCard();
       return;
     }
 
+    if (this.tryAssignNeighborSupport(x, y)) return;
+
     if (this.state.actionMode === 'observe') {
       const dx = x - this.state.player.x;
       const dy = y - this.state.player.y;
       if (Math.abs(dx) + Math.abs(dy) !== 1) {
-        this.feedbackError('观察需要先点相邻方向。');
+        this.feedbackNotice('观察需要先点相邻方向。');
         return;
       }
       const dirKey = Object.entries(DIRS).find(([, dir]) => dir.x === dx && dir.y === dy)?.[0];
@@ -939,32 +1386,79 @@ export default class RescueScene extends Phaser.Scene {
       return;
     }
 
+    if (this.tryUseGuidedAction(x, y)) return;
+
     this.tryMoveTo(x, y);
+  }
+
+  tryAssignNeighborSupport(x, y) {
+    if (this.state.neighborAssigned || !this.state.hasCalled119 || x !== 0 || y !== 4) return false;
+    this.state.neighborAssigned = true;
+    this.playSfx('a40_pickup', 0.55);
+    this.setHuahua('邻居去楼道接应119了。你可以把注意力放回王奶奶和撤离路线。', 'encourage');
+    this.refreshScene();
+    return true;
+  }
+
+  tryUseGuidedAction(x, y) {
+    const guidance = this.getCurrentGuidance();
+    if (!guidance?.target || !isSame(guidance.target, { x, y })) return false;
+
+    if (guidance.actionId === 'observe') {
+      const dx = x - this.state.player.x;
+      const dy = y - this.state.player.y;
+      if (Math.abs(dx) + Math.abs(dy) === 1) {
+        const dirKey = Object.entries(DIRS).find(([, dir]) => dir.x === dx && dir.y === dy)?.[0];
+        this.observeDirection(dirKey);
+        return true;
+      }
+    }
+
+    if (guidance.actionId === 'scene') {
+      this.handleSceneAction();
+      return true;
+    }
+
+    if (guidance.actionId === 'care') {
+      this.handleCareAction();
+      return true;
+    }
+
+    return false;
   }
 
   tryMoveTo(x, y) {
     if (!inBounds(x, y)) return;
     if (!this.ensureCanAct(1)) return;
+    this.state.huahuaGuidancePath = null;
 
     const target = { x, y };
     if (distance(this.state.player, target) !== 1) {
-      this.feedbackError('只能移动到相邻格。先规划下一步，别在烟里乱跑。');
+      this.feedbackNotice('只能移动到相邻格。先规划下一步，别在烟里乱跑。');
       return;
     }
 
-    const blockReason = this.getBlockReason(x, y);
+    const visible = this.isRevealed(x, y);
+    const hiddenBlockReason = this.getBlockReason(x, y, { respectFog: false });
+    if (!visible && hiddenBlockReason) {
+      this.reveal(x, y);
+      this.feedbackNotice('烟雾里看清了一点：这个方向暂时不能直接通过。先观察或换一格路线。');
+      return;
+    }
+
+    const blockReason = this.getBlockReason(x, y, { respectFog: true });
     if (blockReason) {
       if (this.getTileKind(x, y) === 'FIRE') {
-        this.spendAP(1);
+        this.state.ap -= 1;
         this.state.fireRisk = clamp(this.state.fireRisk + 5, 0, 100);
-        this.feedbackError('明火格不能通行。这一步浪费了行动点，现实中应立刻绕开。');
+        this.feedbackPenalty('明火格不能通行。这一步浪费了行动力，现实中应立刻绕开。');
         this.reveal(x, y);
         this.refreshScene();
         this.afterAction();
         return;
       }
       this.reveal(x, y);
-      this.feedbackError(blockReason);
+      this.feedbackNotice(blockReason);
       this.refreshScene();
       return;
     }
@@ -972,14 +1466,24 @@ export default class RescueScene extends Phaser.Scene {
     const previous = { ...this.state.player };
     this.state.playerTrail.push(previous);
     if (this.state.playerTrail.length > 4) this.state.playerTrail.shift();
+    this.state.lastPlayerDirection = this.getMoveDirection(previous, target);
     this.state.player = target;
-    this.spendAP(1);
+    this.state.playerMotion = { from: previous, to: target, startedAt: this.time.now, duration: 150 };
+    this.state.ap -= 1;
     this.revealAround(target, this.state.hasMask ? 2 : 1);
     this.handleMoveTriggers(previous);
     this.handleEscortFollow(previous);
     this.refreshScene();
     this.checkSuccess();
     this.afterAction();
+  }
+
+  getMoveDirection(from, to) {
+    if (to.x > from.x) return 'right';
+    if (to.x < from.x) return 'left';
+    if (to.y > from.y) return 'down';
+    if (to.y < from.y) return 'up';
+    return this.state.lastPlayerDirection ?? 'down';
   }
 
   handleMoveTriggers(previous) {
@@ -1012,7 +1516,9 @@ export default class RescueScene extends Phaser.Scene {
     if (!this.state.escortMode) return;
 
     if (this.isPositionSafeForGrandma(previousPlayerPos)) {
+      const previousGrandma = { ...this.state.grandma };
       this.state.grandma = { ...previousPlayerPos };
+      this.state.grandmaMotion = { from: previousGrandma, to: previousPlayerPos, startedAt: this.time.now, duration: 170 };
       this.revealAround(this.state.grandma, 1);
       this.setHuahua('很好，她正跟着你。别走太快，尽量把路线带向左侧安全区。', 'encourage');
     } else {
@@ -1021,6 +1527,7 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   handleSceneAction() {
+    this.state.huahuaGuidancePath = null;
     if (this.canPickupMask()) {
       this.showPickupMaskCard();
       return;
@@ -1037,10 +1544,11 @@ export default class RescueScene extends Phaser.Scene {
       return;
     }
 
-    this.feedbackError('附近没有可处理的现场目标。先观察或移动到面罩、障碍、阀门旁边。');
+    this.feedbackNotice('附近没有可处理的现场目标。先观察或移动到面罩、障碍、阀门旁边。');
   }
 
   handleCareAction() {
+    this.state.huahuaGuidancePath = null;
     if (this.canCalmGrandma()) {
       this.showCalmCard();
       return;
@@ -1061,17 +1569,17 @@ export default class RescueScene extends Phaser.Scene {
       return;
     }
 
-    this.feedbackError('还没有到沟通距离。先找到王奶奶，并停在她相邻的格子。');
+    this.feedbackNotice('还没有到沟通距离。先找到王奶奶，并停在她相邻的格子。');
   }
 
   showPickupMaskCard() {
     this.showDecisionCard({
       title: '发现防烟面罩',
-      body: '防烟面罩能让探索和护送更稳，但拾取会消耗1 AP。',
+      body: '防烟面罩能让探索和护送更稳，但拾取会消耗1点行动力。',
       options: [
         {
           label: '拾取面罩',
-          note: '消耗1 AP',
+          note: '消耗1点行动力',
           recommended: true,
           onSelect: () => {
             if (!this.spendAP(1)) return;
@@ -1085,7 +1593,7 @@ export default class RescueScene extends Phaser.Scene {
         },
         {
           label: '先不拿',
-          note: '不消耗AP',
+          note: '不消耗行动力',
           onSelect: () => {
             this.setHuahua('可以，但护送时烟雾伤害会更高。记住：救人也要做好防护。', 'hint');
             this.refreshScene();
@@ -1103,14 +1611,14 @@ export default class RescueScene extends Phaser.Scene {
       options: [
         {
           label: isFridge ? '清除冰箱' : '清除储物架',
-          note: '消耗2 AP',
+          note: '消耗2点行动力',
           recommended: isFridge || this.state.round <= 6,
           onSelect: () => {
             if (!this.spendAP(2)) return;
             if (isFridge) this.state.clearedFridge = true;
             else this.state.clearedShelf = true;
             this.playSfx('a41_clear_obstacle', 0.75);
-            this.setHuahua('清开了。路线更通畅，但也要记得还剩多少AP。', 'encourage');
+            this.setHuahua('清开了。路线更通畅，但也要记得还剩多少行动力。', 'encourage');
             this.revealAround(obstacle.pos, 1);
             this.refreshScene();
             this.afterAction();
@@ -1118,7 +1626,7 @@ export default class RescueScene extends Phaser.Scene {
         },
         {
           label: isFridge ? '绕路过去' : '放弃阀门先救人',
-          note: '不消耗AP',
+          note: '不消耗行动力',
           onSelect: () => {
             this.setHuahua(isFridge ? '绕路也可以，记得别把时间都花在烟里。' : '合理选择。救人和撤离始终是第一目标。', 'hint');
             this.refreshScene();
@@ -1136,7 +1644,7 @@ export default class RescueScene extends Phaser.Scene {
       options: [
         {
           label: '关闭燃气',
-          note: disabledReason ? '当前不可执行' : '消耗1 AP',
+          note: disabledReason ? '当前不可执行' : '消耗1点行动力',
           recommended: !disabledReason,
           disabled: Boolean(disabledReason),
           onSelect: () => {
@@ -1167,7 +1675,7 @@ export default class RescueScene extends Phaser.Scene {
       options: [
         {
           label: '蹲下并慢慢说明身份',
-          note: '正确，消耗1 AP',
+          note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
             if (!this.spendAP(1)) return;
@@ -1185,9 +1693,8 @@ export default class RescueScene extends Phaser.Scene {
           note: '错误，恐慌上升',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('她听不清也很害怕。大声催促只会让她更慌，应该慢慢说明身份。', 0);
             this.state.panic = clamp(this.state.panic + 20, 0, 100);
-            this.refreshScene();
+            this.applyWrongAction('她听不清也很害怕。大声催促只会让她更慌，应该慢慢说明身份。', 0);
             this.afterAction();
           },
         },
@@ -1196,10 +1703,9 @@ export default class RescueScene extends Phaser.Scene {
           note: '错误，拒绝移动',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('不要直接拉扯恐慌老人。先说明你是谁，再引导她跟着你走。', 0);
             this.state.panic = clamp(this.state.panic + 30, 0, 100);
             this.state.trust = clamp(this.state.trust - 10, 0, 100);
-            this.refreshScene();
+            this.applyWrongAction('不要直接拉扯恐慌老人。先说明你是谁，再引导她跟着你走。', 0);
             this.afterAction();
           },
         },
@@ -1209,7 +1715,6 @@ export default class RescueScene extends Phaser.Scene {
           danger: true,
           onSelect: () => {
             this.applyWrongAction('她看不清方向。救援要给清晰、温和的引导。', 0);
-            this.refreshScene();
             this.afterAction();
           },
         },
@@ -1224,7 +1729,7 @@ export default class RescueScene extends Phaser.Scene {
       options: [
         {
           label: '给王奶奶戴上面罩',
-          note: '消耗1 AP',
+          note: '消耗1点行动力',
           recommended: true,
           onSelect: () => {
             if (!this.spendAP(1)) return;
@@ -1255,7 +1760,7 @@ export default class RescueScene extends Phaser.Scene {
       options: [
         {
           label: '引导撤离',
-          note: '消耗1 AP',
+          note: '消耗1点行动力',
           recommended: true,
           onSelect: () => {
             if (!this.spendAP(1)) return;
@@ -1268,7 +1773,7 @@ export default class RescueScene extends Phaser.Scene {
         {
           label: '再观察路线',
           note: '返回观察方向',
-          onSelect: () => this.showObserveChoices(),
+          onSelect: () => this.enterObserveMode(),
         },
       ],
     });
@@ -1280,7 +1785,9 @@ export default class RescueScene extends Phaser.Scene {
     if (distance(this.state.player, this.state.grandma) > 1 && this.state.playerTrail.length > 0) {
       const target = this.state.playerTrail[this.state.playerTrail.length - 1];
       if (this.isPositionSafeForGrandma(target)) {
+        const previousGrandma = { ...this.state.grandma };
         this.state.grandma = { ...target };
+        this.state.grandmaMotion = { from: previousGrandma, to: target, startedAt: this.time.now, duration: 170 };
       }
     }
 
@@ -1292,11 +1799,16 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   endTurn() {
-    if (this.modalOpen || this.state.gameOver || !this.state.hasCalled119) return;
+    if (this.modalOpen || this.state.gameOver || this.state.resolvingEnvironment || !this.state.hasCalled119) return;
+    if (this.pendingAutoResolve) {
+      this.pendingAutoResolve.remove(false);
+      this.pendingAutoResolve = null;
+    }
     this.resolveEnvironment();
   }
 
   resolveEnvironment() {
+    if (this.state.resolvingEnvironment) return;
     const messages = [];
     const grandmaKind = this.getTileKind(this.state.grandma.x, this.state.grandma.y);
     let damage = 0;
@@ -1312,13 +1824,46 @@ export default class RescueScene extends Phaser.Scene {
       this.playSfx('a39_smoke_expand', 0.3);
     }
 
+    if (this.state.grandmaHp <= 0) {
+      this.finish(false, '烟雾里停留太久了。下次要更快判断路线，必要时先放弃加分项，优先撤离。');
+      return;
+    }
+
     const expansionFrequency = this.state.gasClosed ? 3 : 2;
     const shouldExpand = this.state.round % expansionFrequency === 0;
     if (shouldExpand) {
-      this.expandFire();
-      this.movePanickedGrandma();
-      messages.push(this.state.gasClosed ? '火势轻微扩散，燃气已关闭，风险上升较慢。' : '火势扩散了。救援窗口正在变短。');
+      const fireTarget = this.getNextFireTarget();
+      const grandmaTarget = this.getPanickedGrandmaTarget();
+      if (fireTarget || grandmaTarget) {
+        this.previewEnvironmentChange({ fireTarget, grandmaTarget, messages });
+        return;
+      }
     }
+
+    this.completeEnvironmentResolution(messages, shouldExpand);
+  }
+
+  previewEnvironmentChange({ fireTarget, grandmaTarget, messages }) {
+    this.state.resolvingEnvironment = true;
+    this.state.pendingFireWarnings = fireTarget ? [fireTarget] : [];
+    this.state.pendingGrandmaWarning = grandmaTarget;
+    this.playSfx('a39_smoke_expand', 0.55);
+    this.setHuahua('烟雾和火势有变化迹象。先看预警位置，马上进入下一回合。', 'hint');
+    this.refreshScene();
+
+    this.time.delayedCall(900, () => {
+      if (this.state.gameOver) return;
+      this.state.pendingFireWarnings = [];
+      this.state.pendingGrandmaWarning = null;
+      if (fireTarget) this.expandFireAt(fireTarget);
+      if (grandmaTarget) this.movePanickedGrandma(grandmaTarget);
+      messages.push(this.state.gasClosed ? '火势轻微扩散，燃气已关闭，风险上升较慢。' : '火势扩散了。救援窗口正在变短。');
+      this.completeEnvironmentResolution(messages, true);
+    });
+  }
+
+  completeEnvironmentResolution(messages, hadExpansion = false) {
+    this.state.resolvingEnvironment = false;
 
     if (this.state.grandmaHp <= 0) {
       this.finish(false, '烟雾里停留太久了。下次要更快判断路线，必要时先放弃加分项，优先撤离。');
@@ -1332,51 +1877,93 @@ export default class RescueScene extends Phaser.Scene {
 
     this.state.round += 1;
     this.state.ap = MAX_AP;
+    this.state.huahuaGuidancePath = null;
+    if (this.state.huahuaCooldown > 0) {
+      this.state.huahuaCooldown -= 1;
+    }
 
     if (this.state.round > MAX_ROUND) {
-      this.finish(false, '救援窗口已经错过。下次可以减少无效移动，把行动点优先用在观察、安抚和撤离上。');
+      this.finish(false, '救援窗口已经错过。下次可以减少无效移动，把行动力优先用在观察、安抚和撤离上。');
       return;
     }
 
-    this.setHuahua(messages.length > 0 ? messages.join(' ') : '环境暂时稳定。新回合开始，继续规划救援路线。', this.state.grandmaHp <= 40 ? 'hint' : 'normal');
+    if (this.shouldRemindMask()) {
+      messages.push('防烟面罩已经发现，还没拾取。若路线允许，先做好防护会更稳。');
+      this.state.maskReminderRound = this.state.round;
+    }
+
+    this.setHuahua(messages.length > 0 ? messages.join(' ') : hadExpansion ? '环境已经变化。新回合开始，重新确认路线。' : '环境暂时稳定。新回合开始，继续规划救援路线。', this.state.grandmaHp <= 40 || messages.length > 0 ? 'hint' : 'normal');
     this.refreshScene();
   }
 
   afterAction() {
     if (this.state.gameOver) return;
     if (this.state.ap <= 0) {
-      this.time.delayedCall(260, () => {
+      if (this.pendingAutoResolve) this.pendingAutoResolve.remove(false);
+      this.pendingAutoResolve = this.time.delayedCall(260, () => {
+        this.pendingAutoResolve = null;
         if (!this.state.gameOver && !this.modalOpen) this.resolveEnvironment();
       });
     }
   }
 
+  shouldRemindMask() {
+    return this.state.foundMask
+      && !this.state.hasMask
+      && !this.state.grandmaMasked
+      && this.state.round - this.state.maskReminderRound >= 3;
+  }
+
+  getNextFireTarget() {
+    return FIRE_SEQUENCE[this.state.fireExpansionIndex] ?? null;
+  }
+
   expandFire() {
-    const next = FIRE_SEQUENCE[this.state.fireExpansionIndex];
+    this.expandFireAt(this.getNextFireTarget());
+  }
+
+  expandFireAt(target) {
+    const next = target;
     if (next) {
       const key = keyOf(next.x, next.y);
       if (!this.state.dynamicFire.has(key) && !isSame(next, this.state.player) && !isSame(next, this.state.grandma)) {
         this.state.dynamicFire.add(key);
         this.reveal(next.x, next.y);
+        this.smokeBurstTiles.push(next);
       }
       this.state.fireExpansionIndex += 1;
     }
 
     this.state.fireRisk = clamp(this.state.fireRisk + (this.state.gasClosed ? 5 : 10), 0, 100);
     this.playSfx('a39_smoke_expand', 0.6);
+    this.cameras.main.shake(120, 0.002);
   }
 
-  movePanickedGrandma() {
-    if (this.state.isCalmed || this.state.escortMode) return;
+  movePanickedGrandma(target = this.getPanickedGrandmaTarget()) {
+    if (!target) return;
+    const previous = { ...this.state.grandma };
+    this.state.grandma = target;
+    this.state.grandmaMotion = { from: previous, to: target, startedAt: this.time.now, duration: 190 };
+    if (this.isRevealed(target.x, target.y)) this.state.foundGrandma = true;
+  }
 
+  getPanickedGrandmaTarget() {
+    if (this.state.isCalmed || this.state.escortMode) return null;
+    const scripted = PANIC_SCRIPT.get(this.state.round);
+    if (scripted && distance(this.state.grandma, scripted) === 1 && this.isPositionAllowedForPanic(scripted)) {
+      return scripted;
+    }
     const candidates = Object.values(DIRS)
       .map((dir) => ({ x: this.state.grandma.x + dir.x, y: this.state.grandma.y + dir.y }))
-      .filter((pos) => this.isPositionAllowedForPanic(pos));
+      .filter((pos) => this.isPositionAllowedForPanic(pos))
+      .sort((a, b) => {
+        const smokeA = this.getTileKind(a.x, a.y) === 'HSMK' ? 1 : 0;
+        const smokeB = this.getTileKind(b.x, b.y) === 'HSMK' ? 1 : 0;
+        if (smokeA !== smokeB) return smokeA - smokeB;
+        return distance(a, this.state.player) - distance(b, this.state.player);
+      });
 
-    if (candidates.length === 0) return;
-    const next = candidates[this.state.round % candidates.length];
-    this.state.grandma = next;
-    if (this.isRevealed(next.x, next.y)) this.state.foundGrandma = true;
+    return candidates[0] ?? null;
   }
 
   finish(success, reason) {
@@ -1413,10 +2000,31 @@ export default class RescueScene extends Phaser.Scene {
           onSelect: () => this.scene.restart({ level: this.level }),
         },
         {
-          label: '继续查看',
-          note: '保留当前结算',
+          label: '查看知识卡',
+          note: '复盘关键知识',
           recommended: success,
+          onSelect: () => this.showKnowledgeCard(success, reason),
+        },
+      ],
+    });
+  }
+
+  showKnowledgeCard(success, reason) {
+    this.showDecisionCard({
+      title: '火场协助知识卡',
+      body: '1. 先判断自身安全并呼叫119，不盲目深入浓烟。\n2. 浓烟中低姿移动，看不清时先观察，不穿越明火。\n3. 面对恐慌老人，蹲下、慢说、说明身份，再引导撤离。\n4. 面罩和阀门是风险管理手段，但撤离生命优先。',
+      persist: true,
+      options: [
+        {
+          label: '返回结算',
+          note: '查看得分与复盘',
+          recommended: true,
           onSelect: () => this.showResultCard(success, reason),
+        },
+        {
+          label: '重新开始',
+          note: '重置关卡一',
+          onSelect: () => this.scene.restart({ level: this.level }),
         },
       ],
     });
@@ -1430,6 +2038,7 @@ export default class RescueScene extends Phaser.Scene {
     if (this.state.hasMask) score += 7;
     if (this.state.grandmaMasked) score += 7;
     if (this.state.gasClosed) score += 4;
+    if (this.state.neighborAssigned) score += 3;
     if (this.state.usedObserve) score += 2;
     score += clamp(12 - this.state.round, 0, 10);
     score -= this.state.wrongActions * 4;
@@ -1451,6 +2060,7 @@ export default class RescueScene extends Phaser.Scene {
       this.state.gasClosed ? '你在安全条件下关闭了燃气阀门。' : '燃气阀门未处理，但优先救人也是合理路线。',
     ];
     if (success) lines.unshift(`王奶奶剩余生命状态 ${Math.round(this.state.grandmaHp)}，用时 ${this.state.round} 回合。`);
+    lines.push(this.state.neighborAssigned ? '你安排邻居去楼道接应119，现场协作更清晰。' : '可以让门口邻居接应119，给撤离和救援留出通道。');
     return lines.join('\n');
   }
 
@@ -1493,18 +2103,80 @@ export default class RescueScene extends Phaser.Scene {
     }
   }
 
-  feedbackError(message) {
-    this.state.wrongActions += 1;
-    this.playSfx('a43_action_error', 0.72);
-    this.setHuahua(message, 'hint');
-    this.cameras.main.shake(120, 0.004);
+  feedbackNotice(message, mood = 'hint') {
+    this.setHuahua(message, mood);
     this.refreshScene();
+  }
+
+  feedbackError(message, { penalize = false, sound = false, shake = false } = {}) {
+    if (penalize) this.state.wrongActions += 1;
+    if (sound) this.playSfx('a43_action_error', 0.72);
+    this.setHuahua(message, 'hint');
+    if (shake) this.cameras.main.shake(120, 0.004);
+    this.refreshScene();
+  }
+
+  feedbackPenalty(message) {
+    this.feedbackError(message, { penalize: true, sound: true, shake: true });
   }
 
   setHuahua(text, mood = 'normal', title = '当前目标') {
     this.huahuaText = text;
     this.huahuaMood = mood;
     this.huahuaTitle = title;
+    if (this.time) {
+      this.lastFeedback = { text, mood, stamp: this.time.now };
+    }
+
+    if (this.huahuaSprite) {
+      if (mood === 'encourage' || mood === 'relieved') {
+        this.showHuahuaLoveReaction();
+      } else if (mood === 'hint' || mood === 'warn') {
+        this.showHuahuaSweatReaction();
+      }
+    }
+  }
+
+  showHuahuaLoveReaction() {
+    if (!this.huahuaSprite) return;
+    const heart = this.add.text(this.huahuaSprite.x - 30, this.huahuaSprite.y - 20, '❤️', { fontSize: '24px' });
+    this.uiLayer.add(heart);
+    this.tweens.add({
+      targets: heart,
+      y: heart.y - 45,
+      scaleX: 1.4,
+      scaleY: 1.4,
+      alpha: 0,
+      duration: 800,
+      ease: 'Sine.easeOut',
+      onComplete: () => heart.destroy()
+    });
+  }
+
+  showHuahuaSweatReaction() {
+    if (!this.huahuaSprite) return;
+    const originalX = 1470;
+    this.tweens.add({
+      targets: this.huahuaSprite,
+      x: originalX + 6,
+      yoyo: true,
+      repeat: 4,
+      duration: 45,
+      onComplete: () => {
+        this.huahuaSprite.x = originalX;
+      }
+    });
+
+    const sweat = this.add.text(this.huahuaSprite.x + 10, this.huahuaSprite.y - 20, '💦', { fontSize: '24px' });
+    this.uiLayer.add(sweat);
+    this.tweens.add({
+      targets: sweat,
+      y: sweat.y + 15,
+      alpha: 0,
+      duration: 700,
+      ease: 'Sine.easeIn',
+      onComplete: () => sweat.destroy()
+    });
   }
 
   spendAP(cost) {
@@ -1514,9 +2186,9 @@ export default class RescueScene extends Phaser.Scene {
   }
 
   ensureCanAct(cost) {
-    if (this.state.gameOver) return false;
+    if (this.state.gameOver || this.state.resolvingEnvironment) return false;
     if (this.state.ap < cost) {
-      this.feedbackError('AP不足。可以结束回合，但环境会继续变化。');
+      this.feedbackNotice('行动力不足。可以结束回合，但环境会继续变化。');
       return false;
     }
     return true;
@@ -1598,7 +2270,8 @@ export default class RescueScene extends Phaser.Scene {
     return 'grandma_idle';
   }
 
-  getBlockReason(x, y) {
+  getBlockReason(x, y, { respectFog = false } = {}) {
+    if (respectFog && !this.isRevealed(x, y) && !isSame({ x, y }, this.state.grandma)) return null;
     const kind = this.getTileKind(x, y);
     if (isSame({ x, y }, this.state.grandma)) return '不要站到王奶奶身上。停在相邻格，用“沟通护送”安抚她。';
     if (kind === 'WALL') return '这里是墙体或不可进入区域。';
@@ -1617,7 +2290,8 @@ export default class RescueScene extends Phaser.Scene {
 
   isPositionAllowedForPanic(pos) {
     if (!inBounds(pos.x, pos.y)) return false;
-    if (pos.x < 5 || pos.y < 3 || pos.y > 6) return false;
+    if (pos.x < 7 || pos.x > 9 || pos.y < 4 || pos.y > 6) return false;
+    if (isSame(pos, this.state.player)) return false;
     const kind = this.getTileKind(pos.x, pos.y);
     return !['WALL', 'FIRE', 'OBS', 'OBJ'].includes(kind);
   }

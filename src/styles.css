@@ -65,39 +65,39 @@ button {
 .home-primary-actions {
   position: absolute;
   z-index: 2;
-  top: 22vh;
+  top: 50%;
   left: 50%;
   display: grid;
-  width: min(430px, calc(100vw - 48px));
-  transform: translateX(-50%);
-  gap: 18px;
+  width: min(420px, calc(100vw - 48px));
+  transform: translate(-50%, -50%);
+  gap: 40px;
 }
 
 .home-menu-title {
   justify-self: center;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   color: #fff7dc;
   font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
-  font-size: clamp(58px, 6.2vw, 106px);
+  font-size: clamp(64px, 7.5vw, 118px);
   font-weight: 900;
-  line-height: 0.95;
+  line-height: 1.1;
   text-align: center;
   white-space: nowrap;
-  -webkit-text-stroke: 2px rgba(117, 38, 27, 0.9);
+  -webkit-text-stroke: 2px rgba(117, 38, 27, 0.85);
   text-shadow:
-    0 4px 0 rgba(124, 42, 29, 0.72),
-    0 10px 22px rgba(77, 36, 22, 0.34);
+    0 3px 0 rgba(124, 42, 29, 0.55),
+    0 6px 14px rgba(77, 36, 22, 0.28);
 }
 
 .home-action {
-  min-height: 70px;
-  border: 4px solid #66251d;
-  border-radius: 8px;
-  box-shadow: 0 8px 0 #7b3426, 0 12px 18px rgba(77, 36, 22, 0.25);
+  min-height: 56px;
+  border: 3px solid #66251d;
+  border-radius: 10px;
+  box-shadow: 0 6px 0 #7b3426, 0 8px 12px rgba(77, 36, 22, 0.2);
   cursor: pointer;
-  font-size: clamp(24px, 2.3vw, 38px);
+  font-size: clamp(26px, 2.8vw, 42px);
   font-weight: 900;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   transition:
     transform 160ms ease,
     box-shadow 160ms ease,
@@ -107,15 +107,18 @@ button {
 .home-action:hover {
   filter: brightness(1.05);
   transform: translateY(2px);
-  box-shadow: 0 6px 0 #7b3426, 0 10px 16px rgba(77, 36, 22, 0.22);
+  box-shadow: 0 4px 0 #7b3426, 0 6px 12px rgba(77, 36, 22, 0.18);
 }
 
 .home-action:active {
-  transform: translateY(7px);
-  box-shadow: 0 1px 0 #7b3426, 0 4px 8px rgba(77, 36, 22, 0.18);
+  transform: translateY(5px);
+  box-shadow: 0 1px 0 #7b3426, 0 2px 6px rgba(77, 36, 22, 0.15);
 }
 
 .home-action-start {
+  justify-self: center;
+  width: auto;
+  padding: 0 28px;
   color: #fff6df;
   background: linear-gradient(180deg, #e34d40, #c9322d);
   text-shadow: 0 2px 0 rgba(83, 26, 18, 0.42);
@@ -655,15 +658,16 @@ button {
   .home-primary-actions {
     top: auto;
     bottom: 32px;
-    width: min(430px, calc(100vw - 32px));
-    padding: 14px;
-    border-radius: 8px;
-    background: rgba(66, 35, 25, 0.28);
-    backdrop-filter: blur(2px);
+    transform: translateX(-50%);
+    width: min(420px, calc(100vw - 32px));
+    padding: 14px 12px;
+    border-radius: 10px;
+    background: rgba(66, 35, 25, 0.2);
+    backdrop-filter: blur(3px);
   }
 
   .home-action {
-    min-height: 62px;
+    min-height: 50px;
   }
 
   .level-desk {

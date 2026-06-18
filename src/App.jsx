@@ -57,9 +57,6 @@ function HomeScreen({ onOpenLevels }) {
           <button className="home-action home-action-start" type="button" onClick={onOpenLevels}>
             开始游戏
           </button>
-          <button className="home-action home-action-secondary" type="button" onClick={onOpenLevels}>
-            选择关卡
-          </button>
         </div>
       </section>
     </main>

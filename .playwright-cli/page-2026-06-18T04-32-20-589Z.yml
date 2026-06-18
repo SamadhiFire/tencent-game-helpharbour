@@ -1,0 +1,4 @@
+- main [ref=e3]:
+  - generic "关卡二 广场黄金四分钟" [ref=e4]:
+    - button "返回选关" [ref=e5] [cursor=pointer]
+  - generic [ref=e6]: 游戏场景加载中...
