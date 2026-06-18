@@ -93,7 +93,7 @@ const AED_ROUTE_BACK = [
   { x: 5, y: 4 },
   { x: 4, y: 4 },
   { x: 3, y: 4 },
-  { x: 3, y: 3 },
+  { x: 2, y: 4 },
 ];
 
 const DIRS = [
@@ -207,7 +207,7 @@ export default class LevelTwoScene extends Phaser.Scene {
   }
 
   update(time) {
-    const active = (this.state.phase === 'S4_CPR_MAINTAIN' || this.state.phase === 'S6_WAIT_AMBULANCE') && !this.state.aedAnalyzing && !this.modalOpen;
+    const active = (this.state.phase === 'S3_CPR_MAINTAIN' || this.state.phase === 'S5_WAIT_AMBULANCE') && !this.state.aedAnalyzing && !this.modalOpen;
     if (this.qteMarker) {
       if (active) {
         this.qteMarker.x = this.getQteX(time);
@@ -487,13 +487,13 @@ export default class LevelTwoScene extends Phaser.Scene {
       if (this.state.hasCalled120 && this.state.hasAssignedAED && !this.state.hasCheckedBreathing) this.drawGuidedMarker(this.state.elder, '判断呼吸', '点击老人开始CPR判断', COLORS.cyan);
     }
 
-    if (this.state.phase === 'S4_CPR_MAINTAIN' || this.state.phase === 'S6_WAIT_AMBULANCE') {
+    if (this.state.phase === 'S3_CPR_MAINTAIN' || this.state.phase === 'S5_WAIT_AMBULANCE') {
       this.drawGuidedMarker(this.state.elder, '持续CPR', '点击老人按压', COLORS.green);
       const blocking = this.state.crowds.find((crowd) => crowd.blocking);
       if (blocking) this.drawGuidedMarker(blocking, '疏散通道', '点击阻挡群众让路', COLORS.orange);
     }
 
-    if (this.state.phase === 'S5_AED_USE') {
+    if (this.state.phase === 'S4_AED_USE') {
       this.drawGuidedMarker(this.state.elder, '使用AED', '按步骤操作设备', COLORS.yellow);
     }
   }
@@ -741,7 +741,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     }
 
     if (this.state.phase === 'S0_SCENE_ASSESSMENT') {
-      return [{ title: '判断现场环境', note: '点击现场完成安全判断', recommended: true, onClick: () => this.performSafetyCheck() }];
+      return [{ title: '判断现场环境', note: '点击现场完成安全判断', recommended: true, onClick: () => this.showSafetyCard() }];
     }
 
     if (this.state.phase === 'S1_RESPONSE_CHECK') {
@@ -751,7 +751,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           note: isElderAdjacent(this.state.player) ? '轻拍双肩并呼唤' : '先移动到老人相邻格',
           recommended: isElderAdjacent(this.state.player),
           disabled: !isElderAdjacent(this.state.player),
-          onClick: () => this.performResponseCheck(),
+          onClick: () => this.showResponseCard(),
         },
       ];
     }
@@ -763,26 +763,26 @@ export default class LevelTwoScene extends Phaser.Scene {
           note: this.state.hasCalled120 ? '救护车已在路上' : '明确请路人A拨打120',
           recommended: !this.state.hasCalled120,
           disabled: this.state.hasCalled120,
-          onClick: () => this.performCall120(),
+          onClick: () => this.showCallCard(),
         },
         {
           title: '指派AED',
           note: this.state.hasAssignedAED ? '路人B正在取AED' : '让路人B去右侧AED柜',
           recommended: this.state.hasCalled120 && !this.state.hasAssignedAED,
           disabled: this.state.hasAssignedAED,
-          onClick: () => this.performAssignAed(),
+          onClick: () => this.showAedAssignCard(),
         },
         {
           title: '判断呼吸',
           note: this.state.hasCalled120 && this.state.hasAssignedAED ? '确认无正常呼吸后开始CPR' : '先完成呼救和AED指派',
           recommended: this.state.hasCalled120 && this.state.hasAssignedAED,
           disabled: !(this.state.hasCalled120 && this.state.hasAssignedAED),
-          onClick: () => this.performBreathingCheck(),
+          onClick: () => this.showBreathingCard(),
         },
       ];
     }
 
-    if (this.state.phase === 'S4_CPR_MAINTAIN' || this.state.phase === 'S6_WAIT_AMBULANCE') {
+    if (this.state.phase === 'S3_CPR_MAINTAIN' || this.state.phase === 'S5_WAIT_AMBULANCE') {
       return [
         {
           title: 'CPR按压',
@@ -796,17 +796,11 @@ export default class LevelTwoScene extends Phaser.Scene {
           disabled: this.state.commandPoint <= 0,
           onClick: () => this.clearAedPath(),
         },
-        {
-          title: '使用AED',
-          note: this.state.aedDelivered ? '按顺序完成AED步骤' : 'AED尚未交接',
-          disabled: !this.state.aedDelivered || this.state.aedUsedCorrectly,
-          recommended: this.state.aedDelivered && !this.state.aedUsedCorrectly,
-          onClick: () => this.showAedUseCard(),
-        },
+
       ];
     }
 
-    if (this.state.phase === 'S5_AED_USE') {
+    if (this.state.phase === 'S4_AED_USE') {
       return [{ title: '使用AED', note: '打开、分析、离身、除颤', recommended: true, onClick: () => this.showAedUseCard() }];
     }
 
@@ -840,31 +834,41 @@ export default class LevelTwoScene extends Phaser.Scene {
     const pos = { x, y };
 
     if (this.state.phase === 'S0_SCENE_ASSESSMENT') {
-      this.performSafetyCheck();
+      const mark = PLAZA_GRID[y]?.[x];
+      const isCore = mark && getBaseTile(mark) === 'CORE';
+      if (!isCore) {
+        this.feedbackError('请点击高亮的核心区域来判断现场安全。');
+        return true;
+      }
+      this.showSafetyCard();
       return true;
     }
 
     if (this.state.phase === 'S1_RESPONSE_CHECK' && same(pos, this.state.elder)) {
-      this.performResponseCheck();
+      if (!isElderAdjacent(this.state.player)) {
+        this.feedbackError('先移动到老人相邻格，再检查反应。');
+        return true;
+      }
+      this.showResponseCard();
       return true;
     }
 
     if (this.state.phase === 'S2_CALL_AND_AED') {
       if (!this.state.hasCalled120 && same(pos, this.state.bystanderA)) {
-        this.performCall120();
+        this.showCallCard();
         return true;
       }
       if (this.state.hasCalled120 && !this.state.hasAssignedAED && same(pos, this.state.bystanderB)) {
-        this.performAssignAed();
+        this.showAedAssignCard();
         return true;
       }
       if (this.state.hasCalled120 && this.state.hasAssignedAED && same(pos, this.state.elder)) {
-        this.performBreathingCheck();
+        this.showBreathingCard();
         return true;
       }
     }
 
-    if ((this.state.phase === 'S4_CPR_MAINTAIN' || this.state.phase === 'S6_WAIT_AMBULANCE') && this.state.cprStarted) {
+    if ((this.state.phase === 'S3_CPR_MAINTAIN' || this.state.phase === 'S5_WAIT_AMBULANCE') && this.state.cprStarted) {
       const crowd = this.getCrowdAt(x, y);
       if (crowd?.blocking) {
         this.clearAedPath();
@@ -876,7 +880,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       }
     }
 
-    if (this.state.phase === 'S5_AED_USE' && same(pos, this.state.elder)) {
+    if (this.state.phase === 'S4_AED_USE' && same(pos, this.state.elder)) {
       this.showAedUseCard();
       return true;
     }
@@ -983,7 +987,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           label: '掐人中试试看',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('偏方不能替代急救流程。先检查反应并呼救。', 8),
+          onSelect: () => this.applyWrongAction('偏方不能替代急救流程。先检查反应并呼救。', 8, false),
         },
       ],
     });
@@ -1057,7 +1061,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           label: '请帮我拍视频',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('现在不是拍视频的时候。请对方拨打120并说明地点。', 6),
+          onSelect: () => this.applyWrongAction('现在不是拍视频的时候。请对方拨打120并说明地点。', 6, false),
         },
         {
           label: '请把老人扶起来',
@@ -1107,7 +1111,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           label: '先不用AED',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('AED越早到达越好。请尽早指派旁人取AED。', 8),
+          onSelect: () => this.applyWrongAction('AED越早到达越好。请尽早指派旁人取AED。', 8, false),
         },
         {
           label: '让路人A也去找',
@@ -1175,7 +1179,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           recommended: true,
           onSelect: () => {
             this.state.cprStarted = true;
-            this.state.phase = 'S4_CPR_MAINTAIN';
+            this.state.phase = 'S3_CPR_MAINTAIN';
             this.state.commandPoint = 1;
             this.state.score.procedure += 14;
             this.setHuahua('无正常呼吸，立即开始CPR。保持连续按压，不要离开老人。', 'hint');
@@ -1210,7 +1214,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           note: '错误',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('未捏住鼻子会导致气体从鼻腔漏出。请重新选择。', 5);
+            this.applyWrongAction('未捏住鼻子会导致气体从鼻腔漏出。请重新选择。', 5, false);
             this.showRescueBreathsCard();
           },
         },
@@ -1219,7 +1223,7 @@ export default class LevelTwoScene extends Phaser.Scene {
           note: '错误',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('未开放气道且按压胸口，会导致气体无法进入肺部。请重新选择。', 5);
+            this.applyWrongAction('未开放气道且按压胸口，会导致气体无法进入肺部。请重新选择。', 5, false);
             this.showRescueBreathsCard();
           },
         },
@@ -1332,7 +1336,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     }
 
     // 在 AED 正常使用后的阶段（S6 阶段），每隔 2 次按压触发一次周期性 AED 心率再分析
-    if (this.state.phase === 'S6_WAIT_AMBULANCE') {
+    if (this.state.phase === 'S5_WAIT_AMBULANCE') {
       this.state.aedAnalysisTimer = (this.state.aedAnalysisTimer || 0) + 1;
       if (this.state.aedAnalysisTimer >= 2) {
         this.state.aedAnalysisTimer = 0;
@@ -1354,9 +1358,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     }
     const blockingCrowd = this.state.crowds.find((crowd) => this.isCrowdOnAedPath(crowd));
     if (!blockingCrowd) {
-      this.state.commandPoint = 0;
-      this.state.score.scene = Math.max(this.state.score.scene, 3);
-      this.setHuahua('通道暂时畅通。继续CPR，等待AED回来。', 'encourage');
+      this.setHuahua('通道已经畅通，无需疏散。继续CPR。', 'hint');
       this.refreshScene();
       return;
     }
@@ -1453,7 +1455,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.state.score.aed = Math.max(this.state.score.aed, 6 + this.state.aedStep * 3);
     this.playSfx('l2_aed_prompt', 0.55);
     this.setHuahua(message, this.state.aedStep >= 3 ? 'encourage' : 'hint');
-    if (!this.state.gameOver && this.state.phase === 'S5_AED_USE') {
+    if (!this.state.gameOver && this.state.phase === 'S4_AED_USE') {
       this.showAedUseCard();
       return;
     }
@@ -1466,7 +1468,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       return;
     }
     this.state.aedUsedCorrectly = true;
-    this.state.phase = 'S6_WAIT_AMBULANCE';
+    this.state.phase = 'S5_WAIT_AMBULANCE';
     this.state.score.aed = 20;
     this.state.stability = clamp(this.state.stability + 4, 0, 100);
     this.playSfx('l2_aed_prompt', 0.82);
@@ -1522,7 +1524,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       } else if (this.state.bystanderB.state === 'withAED') {
         this.state.bystanderB.state = 'handedOff';
         this.state.aedDelivered = true;
-        this.state.phase = 'S5_AED_USE';
+        this.state.phase = 'S4_AED_USE';
         this.state.commandPoint = 0;
         this.playSfx('l2_pickup', 0.72);
         this.setHuahua('AED到了。打开设备，按提示操作。', 'encourage');
@@ -1551,13 +1553,13 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.closeModal();
     this.stopCrowdLoop();
     if (success) {
-      this.state.phase = 'S7_RESULT';
+      this.state.phase = 'S6_RESULT';
       this.playSfx('l2_ambulance_sfx', 0.8);
       this.time.delayedCall(360, () => this.playSfx('l2_success', 0.78));
       this.time.delayedCall(780, () => this.playSfx('l2_flower', 0.72));
       this.setHuahua('你完成了关键流程。冷静分工，就是争取黄金时间。', 'relieved');
     } else {
-      this.state.phase = 'S7_RESULT';
+      this.state.phase = 'S6_RESULT';
       this.playSfx('l2_error', 0.72);
       this.setHuahua('复盘流程，不责备自己：判断、呼救、AED、CPR，一步步来。', 'hint');
     }
@@ -1629,11 +1631,11 @@ export default class LevelTwoScene extends Phaser.Scene {
     return lines.join('\n');
   }
 
-  applyWrongAction(message, stabilityLoss) {
+  applyWrongAction(message, stabilityLoss, severe = true) {
     if (this.state.ap > 0 && !this.state.cprStarted) this.state.ap -= 1;
     this.state.stability = clamp(this.state.stability - stabilityLoss, 0, 100);
     this.state.wrongActions += 1;
-    this.state.severeErrors += 1;
+    if (severe) this.state.severeErrors += 1;
     this.playSfx('l2_error', 0.72);
     this.setHuahua(message, 'hint');
     if (this.state.ap <= 0 && !this.state.cprStarted) {
@@ -1804,7 +1806,7 @@ export default class LevelTwoScene extends Phaser.Scene {
   }
 
   getElderStatus() {
-    if (this.state.phase === 'S7_RESULT') return this.state.gameOver ? '专业接手' : '倒地';
+    if (this.state.phase === 'S6_RESULT') return this.state.gameOver ? '专业接手' : '倒地';
     if (this.state.aedUsedCorrectly) return 'AED已介入';
     if (this.state.cprStarted) return 'CPR进行中';
     if (this.state.hasCheckedBreathing) return '无正常呼吸';
@@ -1817,10 +1819,10 @@ export default class LevelTwoScene extends Phaser.Scene {
       S0_SCENE_ASSESSMENT: '现场安全判断',
       S1_RESPONSE_CHECK: '检查反应',
       S2_CALL_AND_AED: '呼救与AED',
-      S4_CPR_MAINTAIN: 'CPR维持',
-      S5_AED_USE: 'AED步骤',
-      S6_WAIT_AMBULANCE: '继续CPR',
-      S7_RESULT: '结算复盘',
+      S3_CPR_MAINTAIN: 'CPR维持',
+      S4_AED_USE: 'AED步骤',
+      S5_WAIT_AMBULANCE: '继续CPR',
+      S6_RESULT: '结算复盘',
     };
     return labels[this.state.phase] ?? '救援中';
   }
@@ -1831,8 +1833,8 @@ export default class LevelTwoScene extends Phaser.Scene {
       [p !== 'S0_SCENE_ASSESSMENT', '观察评估现场安全'],
       [p !== 'S0_SCENE_ASSESSMENT' && p !== 'S1_RESPONSE_CHECK', '确认患者意识与反应'],
       [this.state.hasCalled120 && this.state.hasAssignedAED && this.state.hasCheckedBreathing, '呼叫120、指派取AED并评估呼吸'],
-      [p === 'S6_WAIT_AMBULANCE' || p === 'S7_RESULT' || this.state.aedUsedCorrectly, 'AED到达并正确操作使用'],
-      [p === 'S7_RESULT', '持续CPR直至救护车到达'],
+      [p === 'S5_WAIT_AMBULANCE' || p === 'S6_RESULT' || this.state.aedUsedCorrectly, 'AED到达并正确操作使用'],
+      [p === 'S6_RESULT', '持续CPR直至救护车到达'],
     ];
     return checks.map(([done, label]) => `${done ? '✅' : '⬜'} ${label}`).join('\n');
   }

@@ -11,6 +11,7 @@ function copyRuntimeAssets() {
     async closeBundle() {
       const copies = [
         ['public/assets/level1', 'dist/assets/level1'],
+        ['public/assets/level2', 'dist/assets/level2'],
         ['public/assets/ui', 'dist/assets/ui'],
       ];
 
