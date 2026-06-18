@@ -207,7 +207,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.drawChrome();
     this.refreshScene();
     this.startGameBgm();
-    this.setHuahua('先看现场是否安全。点击广场高亮区域，确认没有车流、火电等明显危险。', 'hint');
+    this.setHuahua('先看看周围有没有危险。点击广场上亮起来的地方，确认这里安全再靠近老人。', 'hint');
     this.refreshScene();
 
     this.events.once('shutdown', () => this.stopGameBgm());
@@ -831,11 +831,11 @@ export default class LevelTwoScene extends Phaser.Scene {
     if (this.modalOpen || this.state.gameOver) return;
     if (this.handleSceneInteraction(x, y)) return;
     if (this.state.cprStarted) {
-      this.feedbackError('CPR阶段不能离开老人。请持续按压，并指挥旁人取AED。');
+      this.feedbackError('CPR阶段不能离开老人！继续按压，同时指挥旁人去取AED。');
       return;
     }
     if (!this.state.hasCheckedSafety) {
-      this.feedbackError('先判断现场安全，再接近检查。');
+      this.feedbackError('先看看周围有没有危险，再靠近老人。');
       return;
     }
     if (distance(this.state.player, { x, y }) !== 1) return;
@@ -846,7 +846,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     }
     if (!this.spendAP(1)) return;
     this.state.player = { x, y };
-    this.setHuahua(isElderAdjacent(this.state.player) ? '位置合适。现在轻拍双肩并呼唤，检查反应。' : '继续靠近，但不要站到老人身上。', 'hint');
+    this.setHuahua(isElderAdjacent(this.state.player) ? '到位了！现在轻轻拍他的肩膀，喊他看看有没有反应。' : '继续靠近老人，但别站到他身上，停在旁边就行。', 'hint');
     this.afterProcedureAction();
   }
 
@@ -857,7 +857,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       const mark = PLAZA_GRID[y]?.[x];
       const isCore = mark && getBaseTile(mark) === 'CORE';
       if (!isCore) {
-        this.feedbackError('请点击高亮的核心区域来判断现场安全。');
+        this.feedbackError('点击广场上亮起来的地方，确认这里安全再继续。');
         return true;
       }
       this.showSafetyCard();
@@ -866,7 +866,7 @@ export default class LevelTwoScene extends Phaser.Scene {
 
     if (this.state.phase === 'S1_RESPONSE_CHECK' && same(pos, this.state.elder)) {
       if (!isElderAdjacent(this.state.player)) {
-        this.feedbackError('先移动到老人相邻格，再检查反应。');
+        this.feedbackError('先走到老人旁边的格子，再检查他的反应。');
         return true;
       }
       this.showResponseCard();
@@ -914,13 +914,13 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.state.hasCheckedSafety = true;
     this.state.phase = 'S1_RESPONSE_CHECK';
     this.state.score.procedure += 8;
-    this.setHuahua('现场无明显车流、火电等危险。现在靠近老人，停在相邻格检查反应。', 'encourage');
+    this.setHuahua('这里没有车流、火电等危险，可以安全靠近。走到老人旁边，检查他有没有反应。', 'encourage');
     this.afterProcedureAction();
   }
 
   performResponseCheck() {
     if (!isElderAdjacent(this.state.player)) {
-      this.feedbackError('先移动到老人相邻格，再轻拍双肩并呼唤。');
+      this.feedbackError('先走到老人旁边的格子，再轻轻拍肩膀检查他的反应。');
       return;
     }
     if (this.state.hasCheckedResponse || this.state.phase !== 'S1_RESPONSE_CHECK') return;
@@ -928,7 +928,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.state.hasCheckedResponse = true;
     this.state.phase = 'S2_CALL_AND_AED';
     this.state.score.procedure += 8;
-    this.setHuahua('没有反应。现在分工：点路人A拨打120，再点路人B去取AED。', 'hint');
+    this.setHuahua('老人没有反应！接下来分工：让路人A打120，让路人B去取AED。', 'hint');
     this.afterProcedureAction();
   }
 
@@ -939,14 +939,14 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.state.ambulanceCountdown = 9;
     this.state.bystanderA.state = 'call';
     this.state.score.cooperation += 10;
-    this.setHuahua('路人A开始拨打120。继续点击路人B，让他去取AED。', 'encourage');
+    this.setHuahua('路人A开始打120了！继续让路人B去取AED。', 'encourage');
     this.afterProcedureAction();
   }
 
   performAssignAed() {
     if (this.state.phase !== 'S2_CALL_AND_AED' || this.state.hasAssignedAED) return;
     if (!this.state.hasCalled120) {
-      this.feedbackError('先让路人A拨打120，再指派路人B去取AED。');
+      this.feedbackError('先让路人A打120，再让路人B去取AED。');
       return;
     }
     if (!this.spendAP(1)) return;
@@ -954,18 +954,18 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.state.bystanderB.state = 'toAED';
     this.state.bystanderB.routeIndex = 0;
     this.state.score.cooperation += 8;
-    this.setHuahua('路人B去取AED了。现在回到老人身边，点击老人判断呼吸并准备CPR。', 'encourage');
+    this.setHuahua('路人B去取AED了。你回到老人身边，观察他的呼吸情况，准备开始按压。', 'encourage');
     this.afterProcedureAction();
   }
 
   performBreathingCheck() {
     if (this.state.phase !== 'S2_CALL_AND_AED' || this.state.hasCheckedBreathing) return;
     if (!isElderAdjacent(this.state.player)) {
-      this.feedbackError('需要在老人相邻格判断呼吸。');
+      this.feedbackError('你需要站在老人旁边的格子，才能观察他的呼吸。');
       return;
     }
     if (!(this.state.hasCalled120 && this.state.hasAssignedAED)) {
-      this.feedbackError('先完成呼救和AED指派，再判断呼吸进入CPR。');
+      this.feedbackError('先让路人A打120、让路人B去取AED，再判断呼吸。');
       return;
     }
     if (!this.spendAP(1)) return;
@@ -976,10 +976,10 @@ export default class LevelTwoScene extends Phaser.Scene {
   showSafetyCard() {
     this.showDecisionCard({
       title: '第一步应该做什么？',
-      body: '广场有人倒地，围观群众开始聚集。先做现场安全判断，再进入检查反应。',
+      body: '你在广场上看到一位老人突然倒在地上，周围的人开始围过来。你会怎么做？',
       options: [
         {
-          label: '判断现场环境',
+          label: '先看看周围有没有危险，再靠近他',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
@@ -987,27 +987,27 @@ export default class LevelTwoScene extends Phaser.Scene {
             this.state.hasCheckedSafety = true;
             this.state.phase = 'S1_RESPONSE_CHECK';
             this.state.score.procedure += 8;
-            this.setHuahua('对。这里没有车流、火电等明显危险，可以接近检查。', 'encourage');
+            this.setHuahua('对！这里没有车流、火电等危险，可以安全靠近。', 'encourage');
             this.afterProcedureAction();
           },
         },
         {
-          label: '立刻扶起老人',
+          label: '马上把他扶起来',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('不要随意扶起无反应的人。先判断现场安全和反应。', 15),
+          onSelect: () => this.applyWrongAction('别急着扶他起来！万一他伤到了脊椎，乱动会更严重。先看看周围安全不安全。', 15),
         },
         {
-          label: '给老人喝水',
+          label: '给他喂点水，可能是渴了',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('无意识或呼吸异常时不能喂水。请按流程检查反应。', 10),
+          onSelect: () => this.applyWrongAction('他现在没意识，喂水可能呛到喉咙里，反而更危险。先按步骤检查他的反应。', 10),
         },
         {
-          label: '掐人中试试看',
+          label: '按他鼻子下方（掐人中），老一辈说这能叫醒人',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('偏方不能替代急救流程。先检查反应并呼救。', 8, false),
+          onSelect: () => this.applyWrongAction('掐人中不能真的叫醒人。按步骤来：先检查反应，再呼救。', 8, false),
         },
       ],
     });
@@ -1015,11 +1015,11 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showResponseCard() {
     this.showDecisionCard({
-      title: '怎样检查他的反应？',
-      body: '你已经在老人相邻格。检查反应要轻拍双肩并呼唤，不要用力摇晃。',
+      title: '他躺在地上没动静，怎么确认他还有没有意识？',
+      body: '你已经走到老人旁边。他闭着眼睛一动不动，你需要确认他是否还有意识。',
       options: [
         {
-          label: '轻拍双肩并呼唤',
+          label: '轻轻拍他的肩膀，同时喊"爷爷，您能听到我吗？"',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
@@ -1027,30 +1027,30 @@ export default class LevelTwoScene extends Phaser.Scene {
             this.state.hasCheckedResponse = true;
             this.state.phase = 'S2_CALL_AND_AED';
             this.state.score.procedure += 8;
-            this.setHuahua('没有反应。现在要立刻呼救，并请另一个人取AED。', 'hint');
+            this.setHuahua('他没有反应。现在要立刻呼救，并请另一个人去取AED。', 'hint');
             this.afterProcedureAction();
           },
         },
         {
-          label: '用力摇晃老人',
+          label: '用力摇晃他的身体，让他醒过来',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('不要用力摇晃。轻拍双肩、呼唤即可。', 8),
+          onSelect: () => this.applyWrongAction('用力摇晃可能伤到他！轻轻拍肩膀、喊他试试。', 8),
         },
         {
-          label: '等他自己醒来',
+          label: '等一会儿，说不定他自己就醒了',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('等待会耽误急救。无反应时要马上呼救。', 10),
+          onSelect: () => this.applyWrongAction('等下去只会耽误救命时间。他没反应时，要马上呼救。', 10),
         },
         {
-          label: '大声喊醒他',
+          label: '大声喊"爷爷快醒醒"，但不碰他',
           note: '不完整',
           onSelect: () => {
             if (!this.spendAP(1)) return;
             this.state.wrongActions += 1;
             this.playSfx('l2_error', 0.45);
-            this.setHuahua('呼唤可以，但还要轻拍双肩并观察反应。', 'hint');
+            this.setHuahua('喊他可以，但还要轻轻拍肩膀来确认反应。光喊不碰，可能判断不准。', 'hint');
             this.afterProcedureAction();
           },
         },
@@ -1060,11 +1060,11 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showCallCard() {
     this.showDecisionCard({
-      title: '请路人A做什么？',
-      body: '现场急救不能只靠一个人。请具体的人拨打120并说明地点。',
+      title: '你身边有一位路人A，请他帮忙做什么？',
+      body: '你一个人很难完成急救，旁边站着一位路人，你需要让他帮忙做一件最重要的事。',
       options: [
         {
-          label: '请拨打120并说明地点',
+          label: '请他打120急救电话，并告诉对方我们在这里的位置',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
@@ -1073,28 +1073,28 @@ export default class LevelTwoScene extends Phaser.Scene {
             this.state.ambulanceCountdown = 9;
             this.state.bystanderA.state = 'call';
             this.state.score.cooperation += 10;
-            this.setHuahua('指令清楚，救护车已经在路上。继续指派AED。', 'encourage');
+            this.setHuahua('指令清楚，救护车已经在路上！继续指派AED。', 'encourage');
             this.afterProcedureAction();
           },
         },
         {
-          label: '请帮我拍视频',
+          label: '请他帮我一起看看老人怎么了',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('现在不是拍视频的时候。请对方拨打120并说明地点。', 6, false),
+          onSelect: () => this.applyWrongAction('看老人情况不如让专业人士尽快赶来！请路人打120，说清楚我们在哪里。', 6, false),
         },
         {
-          label: '请把老人扶起来',
+          label: '请他把老人扶起来坐好',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('不要随意移动无反应者。先让专业救援在路上。', 15),
+          onSelect: () => this.applyWrongAction('别让任何人随意移动他！他可能伤到了脊椎。先让120在路上。', 15),
         },
         {
-          label: '请站远一点',
+          label: '请他站远一点，别挡着',
           note: '不完整',
           onSelect: () => {
             if (!this.spendAP(1)) return;
-            this.setHuahua('让开有帮助，但还没人打120。指令要更具体。', 'hint');
+            this.setHuahua('让开有帮助，但还没人打120呢。指令要更具体：请他打120急救电话！', 'hint');
             this.afterProcedureAction();
           },
         },
@@ -1104,11 +1104,11 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showAedAssignCard() {
     this.showDecisionCard({
-      title: '请路人B做什么？',
-      body: '倒地老人无反应后，玩家应留在身边。AED由明确指派的路人B去取。',
+      title: '另一位路人B也来了，请他做什么？',
+      body: '现场右侧有一个AED柜（自动体外除颤器，一种能救心脏骤停的设备）。你身边又来了一位路人B，你打算让他做什么？',
       options: [
         {
-          label: '去右侧AED柜取AED',
+          label: '请路人B去右侧取那个AED设备',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
@@ -1117,28 +1117,28 @@ export default class LevelTwoScene extends Phaser.Scene {
             this.state.bystanderB.state = 'toAED';
             this.state.bystanderB.routeIndex = 0;
             this.state.score.cooperation += 8;
-            this.setHuahua('很好，你留在老人身边，让旁人取AED。', 'encourage');
+            this.setHuahua('很好！你留在老人身边，让旁人去取AED。', 'encourage');
             this.afterProcedureAction();
           },
         },
         {
-          label: '我自己跑去拿AED',
+          label: '我自己跑去拿AED，让路人帮忙看着老人',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('确认无反应后不要离开老人身边。请指派旁人取AED。', 10),
+          onSelect: () => this.applyWrongAction('你走了老人就没人照看了！让别人去拿AED，你留下来守着他。', 10),
         },
         {
-          label: '先不用AED',
+          label: '先不管AED，等我搞清楚再说',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('AED越早到达越好。请尽早指派旁人取AED。', 8, false),
+          onSelect: () => this.applyWrongAction('AED越早到越好！请尽快指派旁人去取AED。', 8, false),
         },
         {
-          label: '让路人A也去找',
+          label: '让正在打电话的路人A也去拿AED',
           note: '职责混乱',
           onSelect: () => {
             if (!this.spendAP(1)) return;
-            this.setHuahua('路人A已经负责通话。请让路人B去取AED。', 'hint');
+            this.setHuahua('路人A已经负责通话了，不能让他一边打电话一边跑。请让路人B去取AED。', 'hint');
             this.afterProcedureAction();
           },
         },
@@ -1148,16 +1148,16 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showBreathingCard() {
     if (!isElderAdjacent(this.state.player)) {
-      this.feedbackError('需要在老人相邻格判断呼吸。');
+      this.feedbackError('你需要站在老人旁边的格子，才能观察他的呼吸。');
       return;
     }
 
     this.showDecisionCard({
-      title: '如何判断下一步？',
-      body: '呼救和AED指派完成后，判断是否有正常呼吸。无正常呼吸时立即开始CPR。',
+      title: '老人没有反应了，接下来怎么办？',
+      body: '120已经在路上，路人B也去取AED了。你蹲在老人旁边，需要判断他的呼吸情况来决定下一步。',
       options: [
         {
-          label: '确认无正常呼吸，开始CPR',
+          label: '观察他的胸口起伏，如果没有正常呼吸，立刻开始胸外按压',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
@@ -1167,22 +1167,22 @@ export default class LevelTwoScene extends Phaser.Scene {
           },
         },
         {
-          label: '等救护车来',
+          label: '等救护车来了再说，医生比我专业',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('不能只等待。无正常呼吸后要立即开始CPR。', 12),
+          onSelect: () => this.applyWrongAction('等下去老人的大脑会因为缺血而受伤！没有正常呼吸时，要马上开始按压，不能光等。', 12),
         },
         {
-          label: '给老人喝水',
+          label: '用力拍他的脸，看能不能把他拍醒',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('无意识或呼吸异常时不要喂水。', 10),
+          onSelect: () => this.applyWrongAction('用力拍脸不会叫醒一个心脏骤停的人。他需要胸外按压来让血液重新流动。', 10),
         },
         {
-          label: '让围观者扶坐',
+          label: '找旁边的人帮忙，把他扶坐着看能不能喘气',
           note: '错误',
           danger: true,
-          onSelect: () => this.applyWrongAction('不要随意移动无反应者。现在应开始CPR。', 15),
+          onSelect: () => this.applyWrongAction('不要随便移动他！扶坐着不会让他恢复呼吸。没有正常呼吸时，必须立刻开始胸外按压。', 15),
         },
       ],
     });
@@ -1190,8 +1190,8 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showCprInstructionCard() {
     this.showDecisionCard({
-      title: '🚨 CPR急救科普：如何按压？',
-      body: '【什么是 CPR（心肺复苏术）】\n当患者心脏骤停、无反应且无正常呼吸时，应立即进行心肺复苏。通过胸外按压和人工呼吸，维持脑部与核心器官血液灌注，拯救生命！\n\n【黄金急救频次（100-120次/分钟）】\n在现实中，CPR 的胸外按压频率是每分钟 100 - 120 次（约每秒按压 2 次，节奏类似经典快歌《Stayin\' Alive》的鼓点）。过快（心脏无回盈时间）或过慢（脑灌注不足）都会降低抢救成功率！\n\n【游戏内玩法说明】\n下方的「CPR节奏」条指针正在以 ~110次/分 的标准速率左右摆动。请跟随该频率，看准指针在绿色区域时点击“CPR按压”卡，完美模拟 100-120次/分 的真实急救节奏！',
+      title: '🚨 急救小课堂：胸外按压怎么做？',
+      body: '【什么是胸外按压？】\n老人心脏停了，身体里的血液不再流动。胸外按压就是用手按压他的胸口，像"手动帮心脏跳动"一样，让血液继续送到大脑和其他重要器官。\n\n【按压频率有多快？】\n正确的按压速度是每分钟 100～120 次，大约每秒按 2 次。你可以想象一首节奏很快的歌，跟着那个鼓点按就行。按得太快，心脏来不及重新装满血；按得太慢，大脑会缺血受伤。\n\n【游戏玩法】\n下方的"CPR节奏条"上有一个来回移动的指针。当指针走到绿色区域时，点击"CPR按压"按钮，就相当于你在以正确速度做按压！',
       options: [
         {
           label: '进入 CPR 节奏按压 (模拟 110次/分)',
@@ -1212,16 +1212,16 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showRescueBreathsCard() {
     this.showDecisionCard({
-      title: '🌬️ 人工呼吸：如何正确送气？',
-      body: '你已经完成了30次胸外按压。为了给患者提供充足氧气，现在需要进行2次人工呼吸。请选择正确的操作步骤。',
+      title: '🌬️ 30次按压后，如何给老人送氧气？',
+      body: '你已经连续按了30次，现在需要给老人送2口氧气。选一个正确的做法。',
       options: [
         {
-          label: '仰头抬颏开放气道，捏住患者鼻子，口对口吹气2次',
-          note: '正确，气道开放且不漏气',
+          label: '把他的头往后仰、下巴往上抬（让喉咙通开），捏住他的鼻子，对着嘴吹气2次',
+          note: '正确，让喉咙通开且不漏气',
           recommended: true,
           onSelect: () => {
             this.state.stability = clamp(this.state.stability + 3, 0, 100);
-            this.setHuahua('送气有效，胸廓起伏。请继续进行下一轮CPR按压！', 'encourage');
+            this.setHuahua('送气有效，老人的胸口微微起伏了！继续下一轮按压！', 'encourage');
             this.playSfx('l2_success', 0.75);
             this.closeModal();
             this.advanceBystanderB(3);
@@ -1230,20 +1230,20 @@ export default class LevelTwoScene extends Phaser.Scene {
           },
         },
         {
-          label: '直接用力向嘴里吹气，不捏鼻子',
+          label: '直接对着嘴用力吹气就行，鼻子不用管',
           note: '错误',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('未捏住鼻子会导致气体从鼻腔漏出。请重新选择。', 5, false);
+            this.applyWrongAction('不捏鼻子的话，气会从鼻子漏出去，进不到肺里。记住：仰头、捏鼻子、吹气。', 5, false);
             this.showRescueBreathsCard();
           },
         },
         {
-          label: '压住患者胸口，朝嘴里用力吹气',
+          label: '一边按着胸口一边往嘴里吹气',
           note: '错误',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('未开放气道且按压胸口，会导致气体无法进入肺部。请重新选择。', 5, false);
+            this.applyWrongAction('没把喉咙打开，气吹不进去；还按着胸口，更堵了。要先仰头抬下巴让喉咙通开。', 5, false);
             this.showRescueBreathsCard();
           },
         },
@@ -1254,12 +1254,12 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showAedAnalysisWarningCard() {
     this.showDecisionCard({
-      title: '🚨 AED心律分析警告',
-      body: 'AED发出警报：“正在分析心率，请勿触摸患者！”此时你应当如何操作？',
+      title: '🚨 AED发出警报了！',
+      body: 'AED突然说话了："正在分析心律，请不要碰患者！"这时候你该怎么办？',
       options: [
         {
-          label: '全体避让，双手离开患者身体并大喊：“大家走开，不要碰他！”',
-          note: '正确，确保无人触电或干扰分析',
+          label: '停下按压，大声喊"大家不要碰他"，自己也把手拿开',
+          note: '正确，确保没人碰到老人',
           recommended: true,
           onSelect: () => {
             this.playSfx('l2_success', 0.75);
@@ -1267,13 +1267,30 @@ export default class LevelTwoScene extends Phaser.Scene {
           },
         },
         {
-          label: '抓紧时间继续按压，防止急救中断',
+          label: '不能停！继续按压，每秒钟都很重要',
           note: '错误',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('严重错误！在AED分析和电击时接触患者可能导致触电并干扰心率判定！', 15);
+            this.applyWrongAction('严重错误！AED分析时要碰患者，可能导致触电，还会干扰它判断心律！', 15);
             this.showAedAnalysisWarningCard();
           },
+        },
+        {
+          label: '停下按压，但没提醒旁边的人也离开',
+          note: '不完整',
+          onSelect: () => {
+            if (!this.spendAP(1)) return;
+            this.state.wrongActions += 1;
+            this.playSfx('l2_error', 0.45);
+            this.setHuahua('你自己停下来了，但旁边的人可能还在碰他！要大声喊让所有人都离开。', 'hint');
+            this.showAedAnalysisWarningCard();
+          },
+        },
+        {
+          label: '好奇地按一下AED上的按钮，看看它在说什么',
+          note: '错误',
+          danger: true,
+          onSelect: () => this.applyWrongAction('现在不能碰AED的操作按钮！它会自动分析，你要做的只是让所有人离开老人身体。', 6, false),
         },
       ],
       persist: true,
@@ -1282,18 +1299,18 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showAedAnalysisResultCard() {
     this.showDecisionCard({
-      title: '⚡ AED分析完毕：建议电击',
-      body: 'AED提示：“建议电击，正在充电，请勿靠近。充电完毕，请按下红色闪电按钮。”此时你应该：',
+      title: '⚡ AED说需要电击！',
+      body: 'AED说："建议电击，充电完毕，请按下红色闪电按钮。"这时候你需要做什么？',
       options: [
         {
-          label: '再次确认无人接触患者，按下闪电按钮放电',
-          note: '正确，执行电击',
+          label: '先看看周围有没有人还碰着老人，确认都离开了，再按红色按钮',
+          note: '正确，确认安全后再电击',
           recommended: true,
           onSelect: () => {
             this.state.stability = clamp(this.state.stability + 15, 0, 100);
             this.state.aedAnalyzing = false;
             this.playSfx('l2_success', 0.85);
-            this.setHuahua('电击完成。患者身体瞬间抽动。根据提示立刻恢复CPR按压！', 'encourage');
+            this.setHuahua('电击完成！老人身体瞬间抽动。根据提示立刻恢复按压！', 'encourage');
             this.closeModal();
             this.advanceBystanderB(3);
             this.resolveRescueState();
@@ -1301,11 +1318,31 @@ export default class LevelTwoScene extends Phaser.Scene {
           },
         },
         {
-          label: '自己也拉住老人的手给予安慰，然后按闪电按钮',
+          label: '拉住老人的手安慰他，然后按按钮',
           note: '致命错误',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('致命错误！放电时接触患者会导致您也受到电击！请重新确认安全。', 20);
+            this.applyWrongAction('致命错误！放电时碰着老人，你自己也会被电到！必须先确认所有人都离开老人身体。', 20);
+            this.showAedAnalysisResultCard();
+          },
+        },
+        {
+          label: '直接按红色按钮就行了，不用再检查周围',
+          note: '错误',
+          danger: true,
+          onSelect: () => {
+            this.applyWrongAction('不能跳过安全确认！如果有人还碰着老人，一按按钮他们就会被电到。必须先确认所有人都离开了。', 10);
+            this.showAedAnalysisResultCard();
+          },
+        },
+        {
+          label: '等一下，先问问旁边的大人该不该按',
+          note: '不完整',
+          onSelect: () => {
+            if (!this.spendAP(1)) return;
+            this.state.wrongActions += 1;
+            this.playSfx('l2_error', 0.45);
+            this.setHuahua('急救不能等！AED已经提示该电击了，你只需要确认没人碰着老人，然后按下按钮。', 'hint');
             this.showAedAnalysisResultCard();
           },
         },
@@ -1319,7 +1356,7 @@ export default class LevelTwoScene extends Phaser.Scene {
 
     // 如果 AED 正在分析/电击放电，强行触碰患者会导致触电
     if (this.state.aedAnalyzing) {
-      this.applyWrongAction('严重错误！在AED心律分析或放电充电期间，严禁任何人触碰患者，否则会导致施救者触电并干扰电极分析！', 15);
+      this.applyWrongAction('严重错误！AED在分析或充电的时候碰老人，你自己也可能被电到，还会干扰它判断！', 15);
       return;
     }
 
@@ -1347,7 +1384,7 @@ export default class LevelTwoScene extends Phaser.Scene {
       this.state.cprCombo = 0;
       this.state.cprFeedback = { text: '接近标准区，稳住', color: '#8c7355', stamp: this.time.now };
       this.playSfx('l2_cpr_hit', 0.32);
-      this.setHuahua('这次接近标准区，不扣稳定度。重新跟上绿色节奏。', 'hint');
+      this.setHuahua('这次节奏偏了一点，但不扣稳定度。重新跟上绿色区域的节奏！', 'hint');
     } else {
       this.state.stability = clamp(this.state.stability - 4, 0, 100);
       this.state.cprCombo = 0;
@@ -1386,7 +1423,7 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   clearAedPath() {
     if (this.state.commandPoint <= 0) {
-      this.feedbackError('指挥点不足。完成一轮CPR后会刷新。');
+      this.feedbackError('指挥点不够了。完成一次按压后会获得新的指挥点。');
       return;
     }
     const blockingCrowd = this.state.crowds.find((crowd) => this.isCrowdOnAedPath(crowd));
@@ -1408,7 +1445,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     this.state.pathCleared = !hasMoreBlockingCrowd;
     this.state.score.scene = Math.max(this.state.score.scene, this.state.pathCleared ? 6 : 3);
     this.setHuahua(
-      this.state.pathCleared ? '很好，AED通道清出来了。你继续留在老人身边。' : '第一位群众让开了，但通道上还有人停留。下一轮指挥点继续疏散。',
+      this.state.pathCleared ? '很好，通道清出来了！你继续留在老人身边按压。' : '第一位群众让开了，但通道上还有人。下一轮指挥点继续疏散。',
       this.state.pathCleared ? 'encourage' : 'hint',
     );
     this.refreshScene();
@@ -1423,44 +1460,44 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   showAedUseCard() {
     const steps = [
-      '打开AED',
-      '等待AED分析',
-      '确认所有人离开身体',
-      '除颤后继续CPR',
+      '打开AED开关',
+      '听AED说完再下一步',
+      '大声喊"大家别碰他"确认没人接触',
+      '按红色闪电按钮，然后马上继续按压',
     ];
     const current = steps[this.state.aedStep] ?? '继续CPR';
     const options = [];
 
     if (this.state.aedStep === 0) {
       options.push({
-        label: '打开AED',
+        label: '打开AED开关',
         note: '第1步',
         recommended: true,
         keepOpen: true,
-        onSelect: () => this.advanceAedStep('AED已打开。下一步等待分析。'),
+        onSelect: () => this.advanceAedStep('AED打开了！等它说完下一步提示。'),
       });
     } else if (this.state.aedStep === 1) {
       options.push({
-        label: '等待设备分析',
+        label: '等AED说完提示再进行下一步',
         note: '第2步',
         recommended: true,
         keepOpen: true,
-        onSelect: () => this.advanceAedStep('等待分析完成。下一步确认所有人离开。'),
+        onSelect: () => this.advanceAedStep('分析完成。下一步要喊"大家别碰他"，确认没人接触老人。'),
       });
     } else if (this.state.aedStep === 2) {
       options.push({
-        label: '所有人离开身体',
+        label: '大声喊"大家别碰他"，确认没人接触老人',
         note: '第3步',
         recommended: true,
         keepOpen: true,
         onSelect: () => {
           this.state.allClear = true;
-          this.advanceAedStep('已确认离身。现在才能执行除颤。');
+          this.advanceAedStep('确认完毕，所有人都离开了。现在可以按红色闪电按钮了。');
         },
       });
     } else if (this.state.aedStep === 3) {
       options.push({
-        label: '执行除颤并继续CPR',
+        label: '按红色闪电按钮，然后马上继续按压',
         note: '第4步',
         recommended: true,
         onSelect: () => this.finishAedUse(),
@@ -1469,11 +1506,11 @@ export default class LevelTwoScene extends Phaser.Scene {
 
     options.push({
       label: '直接除颤',
-      note: this.state.allClear ? '仅在完成离身确认后可用' : '未离身会被阻止',
+      note: this.state.allClear ? '仅在完成离身确认后可用' : '没确认离身会被阻止',
       danger: !this.state.allClear,
       onSelect: () => {
         if (!this.state.allClear) {
-          this.applyWrongAction('停止。除颤前必须确认所有人离开身体。', 8);
+          this.applyWrongAction('不行！电击之前必须先喊"大家别碰他"，确认所有人都离开了老人身体。', 8);
           return;
         }
         this.finishAedUse();
@@ -1482,16 +1519,16 @@ export default class LevelTwoScene extends Phaser.Scene {
 
     options.push({
       label: '暂时返回CPR',
-      note: '关闭步骤卡',
+      note: '关闭步骤卡，回去继续按压',
       onSelect: () => {
-        this.setHuahua('AED步骤要尽快完成，但不要跳过离身确认。', 'hint');
+        this.setHuahua('AED步骤要尽快完成，但不要跳过"大家别碰他"那一步！', 'hint');
         this.refreshScene();
       },
     });
 
     this.showDecisionCard({
       title: `AED步骤：${current}`,
-      body: '按设备提示顺序操作。除颤前必须确认所有人离开身体，系统会阻止跳步。',
+      body: 'AED会一步一步提示你怎么操作。记住：按步骤来，每一步都别跳过。特别提醒——电击之前，必须确认没有人碰着老人！',
       options,
     });
   }
@@ -1510,7 +1547,7 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   finishAedUse() {
     if (!this.state.allClear) {
-      this.applyWrongAction('停止。除颤前必须确认所有人离开身体。', 8);
+      this.applyWrongAction('不行！电击之前必须先喊"大家别碰他"，确认所有人都离开了老人身体。', 8);
       return;
     }
     this.state.aedUsedCorrectly = true;
@@ -1552,7 +1589,7 @@ export default class LevelTwoScene extends Phaser.Scene {
         blocking.blocking = true;
         blocking.bubble = '请让出通道';
         this.state.aedDelay += 1;
-        this.setHuahua('AED通道被挡住了，用指挥点请大家让开。', 'hint');
+        this.setHuahua('AED通道被挡住了！用指挥点让旁边的人让开路。', 'hint');
         break;
       }
       this.state.bystanderB.routeIndex += 1;
@@ -1573,7 +1610,7 @@ export default class LevelTwoScene extends Phaser.Scene {
         this.state.phase = 'S4_AED_USE';
         this.state.commandPoint = 0;
         this.playSfx('l2_pickup', 0.72);
-        this.setHuahua('AED到了。打开设备，按提示操作。', 'encourage');
+        this.setHuahua('AED到了！打开设备，听它一步一步的提示来操作。', 'encourage');
       }
     }
   }
@@ -1607,7 +1644,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     } else {
       this.state.phase = 'S6_RESULT';
       this.playSfx('l2_error', 0.72);
-      this.setHuahua('复盘流程，不责备自己：判断、呼救、AED、CPR，一步步来。', 'hint');
+      this.setHuahua('不要责备自己，复盘一下流程：先判断安全、再呼救、再AED、再按压，一步一步来。', 'hint');
     }
     this.refreshScene();
     this.showResultCard(success, reason);
@@ -1617,7 +1654,7 @@ export default class LevelTwoScene extends Phaser.Scene {
     const score = this.calculateScore(success);
     const grade = success ? this.getGrade(score) : '需要复盘';
     const cprRate = this.state.cprAttempts ? Math.round((this.state.cprHits / this.state.cprAttempts) * 100) : 0;
-    const body = `${reason}\n\n本局表现：\n${this.getBehaviorSummary()}\nCPR命中率：${cprRate}%\n\n知识卡：明确指派具体的人拨打120和取AED；除颤前必须确认所有人离开身体；AED后继续CPR直到接手。`;
+    const body = `${reason}\n\n本局表现：\n${this.getBehaviorSummary()}\nCPR命中率：${cprRate}%\n\n知识卡：请具体的人打120和取AED，不要自己跑开；电击前必须喊"大家别碰他"确认没人接触老人；AED做完后继续按压，等救护车来了才算完成。`;
 
     this.showDecisionCard({
       title: `${success ? '成功救援' : '需要复盘'}  ${score}分 / ${grade}`,
@@ -1668,15 +1705,15 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   getBehaviorSummary() {
     const lines = [
-      this.state.hasCheckedSafety ? '已先判断现场安全。' : '未完成现场安全判断。',
-      this.state.hasCheckedResponse ? '已检查反应并确认无反应。' : '未正确检查反应。',
-      this.state.hasCalled120 ? '已明确指派路人A拨打120。' : '未及时指派120。',
-      this.state.hasAssignedAED ? '已明确指派路人B取AED。' : '未及时指派AED。',
-      this.state.aedUsedCorrectly ? '已按顺序完成AED并离身确认。' : 'AED步骤还不完整。',
+      this.state.hasCheckedSafety ? '已先看看周围有没有危险。' : '还没确认周围安全。',
+      this.state.hasCheckedResponse ? '已轻轻拍肩膀检查老人反应。' : '没正确检查老人反应。',
+      this.state.hasCalled120 ? '已让路人A打120急救电话。' : '没及时让人打120。',
+      this.state.hasAssignedAED ? '已让路人B去取AED。' : '没及时让人去取AED。',
+      this.state.aedUsedCorrectly ? '已按步骤做完AED，并喊了"大家别碰他"。' : 'AED步骤没做完。',
     ];
-    if (this.state.pathCleared) lines.push('已疏散AED通道。');
-    if (this.state.crowdInterventions > 0) lines.push(`现场疏导 ${this.state.crowdInterventions} 次。`);
-    if (this.state.bestCprCombo >= CPR_COMBO_BONUS) lines.push(`CPR最佳连击 ${this.state.bestCprCombo}。`);
+    if (this.state.pathCleared) lines.push('已让围观群众让出AED通道。');
+    if (this.state.crowdInterventions > 0) lines.push(`疏导围观群众 ${this.state.crowdInterventions} 次。`);
+    if (this.state.bestCprCombo >= CPR_COMBO_BONUS) lines.push(`CPR最佳连续命中 ${this.state.bestCprCombo} 次。`);
     return lines.join('\n');
   }
 
@@ -1743,7 +1780,7 @@ export default class LevelTwoScene extends Phaser.Scene {
   spendAP(cost) {
     if (this.state.gameOver) return false;
     if (this.state.ap < cost) {
-      this.setHuahua('行动力不足。进入新回合，急救窗口正在缩短。', 'hint');
+      this.setHuahua('行动力不够了。新回合开始，但老人等你急救的时间越来越短了。', 'hint');
       if (!this.state.cprStarted) {
         this.advanceProcedureTurn();
       }
@@ -1813,11 +1850,11 @@ export default class LevelTwoScene extends Phaser.Scene {
 
   getBlockReason(x, y) {
     const pos = { x, y };
-    if (!inBounds(x, y)) return '这里不能通行。';
-    if (same(pos, this.state.elder)) return '不要站到老人身上。停在相邻格检查反应。';
-    if (same(pos, START.aedCabinet)) return 'AED柜需要相邻交互，不能站入柜子格。';
-    if (same(pos, this.state.bystanderA) || same(pos, this.state.bystanderB)) return '这里有人站着，请换相邻格。';
-    if (this.getCrowdAt(x, y)) return '群众占着这个格子。CPR阶段可用指挥点疏散通道。';
+    if (!inBounds(x, y)) return '这里走不通，换个方向试试。';
+    if (same(pos, this.state.elder)) return '别站到老人身上，停在他旁边的格子检查。';
+    if (same(pos, START.aedCabinet)) return 'AED柜要站在旁边才能用，不能钻进去。';
+    if (same(pos, this.state.bystanderA) || same(pos, this.state.bystanderB)) return '这里有人站着，换个旁边的格子吧。';
+    if (this.getCrowdAt(x, y)) return '围观群众占着这个格子。CPR阶段可以用指挥点让他们让开。';
     return null;
   }
 

@@ -1337,48 +1337,47 @@ export default class RescueScene extends Phaser.Scene {
 
   showSafetyCard() {
     this.showDecisionCard({
-      title: '第一步应该做什么？',
-      body: '厨房冒烟时，先保证自身安全并让专业救援在路上。本关只有完成安全判断后才能进入救援流程。',
+      title: '厨房冒浓烟了，你该先做什么？',
+      body: '你闻到焦糊味，厨房方向浓烟滚滚。记住：救人之前，先保护自己。',
       options: [
         {
-          label: '判断现场安全并呼叫119',
+          label: '退到楼道安全处，马上打119报警',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
             this.spendAP(1);
             this.state.hasCalled119 = true;
-            this.setHuahua('对，先确认还能安全接近，再让119和周围成年人在路上。现在低姿前进，必要时先观察。', 'encourage');
+            this.setHuahua('好！119已经打出去了。现在弯着腰慢慢走，看不清就先观察一下。', 'encourage');
             this.refreshScene();
           },
         },
         {
-          label: '直接冲进厨房',
-          note: '错误，会增加火场风险',
+          label: '冲进去看看发生了什么，顺便把奶奶救出来',
+          note: '错误，救人也要先保证自身安全',
           danger: true,
           keepOpen: true,
           onSelect: () => {
-            this.applyWrongAction('不可以盲目冲进浓烟。先判断风险，否则救人者也会遇险。', 10);
+            this.applyWrongAction('不能盲目冲进浓烟里。救人的人自己也要安全，否则谁都救不了。', 10);
             this.showSafetyCard();
           },
         },
         {
-          label: '回房间找贵重物品',
-          note: '严重错误，直接失败',
-          danger: true,
-          onSelect: () => {
-
-            this.state.severeErrors += 1;
-            this.playSfx('a43_action_error', 0.75);
-            this.finish(false, '火灾中不能返回取物。生命安全永远比物品更重要。');
-          },
-        },
-        {
-          label: '打开窗户大声喊',
-          note: '部分错误，可能改变烟气流向',
+          label: '先去找条湿毛巾，捂住口鼻再进去',
+          note: '错误，没打119就先行动很危险',
           danger: true,
           keepOpen: true,
           onSelect: () => {
-            this.applyWrongAction('火场通风可能改变烟和火的流向。先呼救，再从安全路径接近。', 5);
+            this.applyWrongAction('湿毛巾是对的，但顺序不对。应该先退到安全处打119，再考虑其他。', 5);
+            this.showSafetyCard();
+          },
+        },
+        {
+          label: '站在门口大喊奶奶的名字，让她快出来',
+          note: '错误，奶奶听力不好，喊不出来的',
+          danger: true,
+          keepOpen: true,
+          onSelect: () => {
+            this.applyWrongAction('奶奶听力下降，喊她听不见的。先打119报警，再从安全路线过去找她。', 5);
             this.showSafetyCard();
           },
         },
@@ -1389,7 +1388,7 @@ export default class RescueScene extends Phaser.Scene {
   enterObserveMode() {
     if (!this.ensureCanAct(1)) return;
     this.state.actionMode = 'observe';
-    this.setHuahua('进入观察模式。直接点击人物相邻的方向格，花费1点行动力打开那一侧视野。', 'hint');
+    this.setHuahua('观察模式：点击你旁边的方向格，就能看清那边的情况。', 'hint');
     this.refreshScene();
   }
 
@@ -1440,7 +1439,7 @@ export default class RescueScene extends Phaser.Scene {
 
   setMoveMode() {
     this.state.actionMode = 'move';
-    this.setHuahua('低姿前进能降低吸入浓烟的风险。点击相邻格移动，不要穿过火焰和高浓度烟雾最重的区域。', 'hint');
+    this.setHuahua('弯着腰走路能少吸到烟。点击旁边的格子移动，别走有火和烟最浓的地方。', 'hint');
     this.refreshScene();
   }
 
@@ -1475,7 +1474,7 @@ export default class RescueScene extends Phaser.Scene {
     if (this.state.neighborAssigned || !this.state.hasCalled119 || x !== 0 || y !== 4) return false;
     this.state.neighborAssigned = true;
     this.playSfx('a40_pickup', 0.55);
-    this.setHuahua('邻居去楼道接应119了。你可以把注意力放回王奶奶和撤离路线。', 'encourage');
+    this.setHuahua('邻居去帮119指路了！现在专心带奶奶撤离吧。', 'encourage');
     this.refreshScene();
     return true;
   }
@@ -1573,20 +1572,20 @@ export default class RescueScene extends Phaser.Scene {
     if (inEntrance && !this.state.enteredKitchen) {
       this.state.enteredKitchen = true;
       this.startFireLoop();
-      this.setHuahua('这里已经有烟了。低姿前进，看不清就先观察，不要穿过明火和浓烟最重的地方。', 'hint');
+      this.setHuahua('这里有烟了。弯着腰走，看不清就先观察，别往火和浓烟里走。', 'hint');
     } else if (kind === 'SMK' || kind === 'HSMK') {
-      this.setHuahua(this.state.hasMask ? '面罩让你看得更清楚，但护送王奶奶时仍要尽快离开烟雾区。' : '烟里视线很差。能观察就先观察，找到面罩会更稳。', 'hint');
+      this.setHuahua(this.state.hasMask ? '有面罩看得清楚多了，但还是快带奶奶离开烟区！' : '烟里什么都看不清。先观察一下，找到面罩会好很多。', 'hint');
     } else {
-      this.setHuahua('移动成功。继续用行动卡判断下一步。', 'normal');
+      this.setHuahua('走好了。想想下一步做什么。', 'normal');
     }
 
     if (this.state.player.x >= 5 && !this.state.heardGrandma && !this.state.foundGrandma) {
       this.state.heardGrandma = true;
-      this.setHuahua('听到了吗？王奶奶可能在右侧烟雾里。靠近时别大声催她，先说明你是谁。', 'hint');
+      this.setHuahua('听到了吗？奶奶好像在右边烟雾里咳嗽。靠近时别大声催，先说你是谁。', 'hint');
     }
 
     if (isSame(this.state.player, POSITIONS.mask) && !this.state.hasMask) {
-      this.setHuahua('你站到了防烟面罩旁。使用“现场处理”拾取它，护送会安全很多。', 'hint');
+      this.setHuahua('你站在防烟面罩旁边了！点"现场处理"拿起来，带奶奶走的时候有用。', 'hint');
     }
 
     this.checkDiscoveries(previous);
@@ -1595,7 +1594,7 @@ export default class RescueScene extends Phaser.Scene {
   handleEscortFollow(previousPlayerPos) {
     if (!this.state.escortMode) return;
     if (this.state.escortReassuranceNeeded) {
-      this.setHuahua('浓烟压回来，王奶奶有点停住了。用“沟通护送”再安抚一下，再继续带她走。', 'hint');
+      this.setHuahua('烟变浓了，奶奶有点害怕停住了。点"沟通护送"再哄哄她。', 'hint');
       return;
     }
 
@@ -1605,9 +1604,9 @@ export default class RescueScene extends Phaser.Scene {
       this.state.grandmaMotion = { from: previousGrandma, to: previousPlayerPos, startedAt: this.time.now, duration: 170 };
       this.revealAround(this.state.grandma, 1);
       this.state.escortMoves += 1;
-      this.setHuahua('很好，她正跟着你。别走太快，尽量把路线带向左侧安全区。', 'encourage');
+      this.setHuahua('很好，她在跟着你。走慢点，往左边安全区带。', 'encourage');
     } else {
-      this.setHuahua('王奶奶不愿经过危险格。换一条更安全的路线，或先清理障碍。', 'hint');
+      this.setHuahua('奶奶不肯走危险的地方。换条安全的路，或者先把障碍清掉。', 'hint');
     }
 
     this.maybeTriggerEscortSmokeShift();
@@ -1629,7 +1628,7 @@ export default class RescueScene extends Phaser.Scene {
       this.smokeBurstTiles.push(pos);
     });
     this.playSfx('a39_smoke_expand', 0.42);
-    this.setHuahua('回程的烟雾压回来了，原路不一定最稳。先安抚王奶奶，再考虑从下侧绕开浓烟。', 'hint');
+    this.setHuahua('刚才走过的路烟又浓了，原路不一定好走了。先哄哄奶奶，试试从下边绕。', 'hint');
 
     this.time.delayedCall(900, () => {
       if (this.state.gameOver) return;
@@ -1658,7 +1657,7 @@ export default class RescueScene extends Phaser.Scene {
     this.state.neighborAssistUsed = true;
     this.state.panic = clamp(this.state.panic - 10, 0, 100);
     this.revealAround(target, 1);
-    this.setHuahua('邻居在楼道口接住了王奶奶，最后几步更稳了。继续把人带到安全区。', 'encourage');
+    this.setHuahua('邻居在楼道口接应奶奶，最后几步稳多了。加油，快到了！', 'encourage');
   }
 
   handleSceneAction() {
@@ -1715,17 +1714,17 @@ export default class RescueScene extends Phaser.Scene {
   showPickupMaskCard() {
     this.showDecisionCard({
       title: '发现防烟面罩',
-      body: '防烟面罩能让探索和护送更稳，但拾取会消耗1点行动力。',
+      body: '这是防烟面罩！戴上它，浓烟里能看得更远，之后也可以给奶奶用。',
       options: [
         {
-          label: '拾取面罩',
+          label: '戴上它！',
           note: '消耗1点行动力',
           recommended: true,
           onSelect: () => {
             if (!this.spendAP(1)) return;
             this.state.hasMask = true;
             this.playSfx('a40_pickup', 0.8);
-            this.setHuahua('拿到了。烟里看东西会更清楚，之后也可以给王奶奶使用。', 'encourage');
+            this.setHuahua('拿到啦！烟里看东西清楚多了，之后别忘了给奶奶也戴上。', 'encourage');
             this.revealAround(this.state.player, 2);
             this.refreshScene();
             this.afterAction();
@@ -1735,7 +1734,7 @@ export default class RescueScene extends Phaser.Scene {
           label: '先不拿',
           note: '不消耗行动力',
           onSelect: () => {
-            this.setHuahua('可以，但护送时烟雾伤害会更高。记住：救人也要做好防护。', 'hint');
+            this.setHuahua('好吧，但之后带奶奶走的时候烟会更呛。自己做好防护也很重要哦！', 'hint');
             this.refreshScene();
           },
         },
@@ -1764,7 +1763,7 @@ export default class RescueScene extends Phaser.Scene {
               this.state.foundValve = true;
             }
             this.playSfx('a41_clear_obstacle', 0.75);
-            this.setHuahua(isFridge ? '清开冰箱时找到一条湿毛巾，护送容错提高了。继续确认王奶奶的位置。' : '清开储物架后通风更顺，火场风险略降，也能接近燃气阀门了。', 'encourage');
+            this.setHuahua(isFridge ? '推开冰箱时找到一条湿毛巾，带奶奶走的时候更有把握了。' : '储物架推开了，通风好了些，也能去关燃气阀门了。', 'encourage');
             this.revealAround(obstacle.pos, 1);
             this.refreshScene();
             this.afterAction();
@@ -1774,7 +1773,7 @@ export default class RescueScene extends Phaser.Scene {
           label: isFridge ? '绕路过去' : '放弃阀门先救人',
           note: '不消耗行动力',
           onSelect: () => {
-            this.setHuahua(isFridge ? '绕路也可以，记得别把时间都花在烟里。' : '合理选择。救人和撤离始终是第一目标。', 'hint');
+            this.setHuahua(isFridge ? '绕路也行，别在烟里待太久就好。' : '行！救人永远是第一位的。', 'hint');
             this.refreshScene();
           },
         },
@@ -1785,8 +1784,8 @@ export default class RescueScene extends Phaser.Scene {
   showValveCard() {
     const disabledReason = this.getValveDisabledReason();
     this.showDecisionCard({
-      title: '燃气阀门',
-      body: disabledReason ?? '阀门已经在可安全接近范围内。关闭它会降低火场风险，但不要因此耽误救人。',
+      title: '发现燃气阀门 — 要不要关上？',
+      body: disabledReason ?? '关上它能让火势变慢，但要花1点行动力。记住：救人永远排第一。',
       options: [
         {
           label: '关闭燃气',
@@ -1797,7 +1796,7 @@ export default class RescueScene extends Phaser.Scene {
             if (!this.spendAP(1)) return;
             this.state.gasClosed = true;
             this.state.fireRisk = clamp(this.state.fireRisk - 15, 0, 100);
-            this.setHuahua('阀门关上了，火势会慢一些。但现在要立刻回到救援路线。', 'encourage');
+            this.setHuahua('阀门关上了，火烧得慢了些。快回到带奶奶撤离的路上！', 'encourage');
             this.refreshScene();
             this.afterAction();
           },
@@ -1806,7 +1805,7 @@ export default class RescueScene extends Phaser.Scene {
           label: '先不处理',
           note: '合理选择',
           onSelect: () => {
-            this.setHuahua('可以。阀门是加分项，王奶奶撤离才是主目标。', 'hint');
+            this.setHuahua('没问题。关阀门是加分项，带奶奶安全出去才是最重要的！', 'hint');
             this.refreshScene();
           },
         },
@@ -1816,11 +1815,11 @@ export default class RescueScene extends Phaser.Scene {
 
   showCalmCard() {
     this.showDecisionCard({
-      title: '王奶奶很慌张',
-      body: '她看不清也听不太清。此时不要强拉硬拽，先稳定她的情绪。',
+      title: '奶奶缩在墙角发抖……',
+      body: '她看不清路、也听不太清。你靠近时她一直在说"谁啊？别过来！"。',
       options: [
         {
-          label: '蹲下并慢慢说明身份',
+          label: '蹲下来和她一样高，轻声说"奶奶，我是小红花志愿者"',
           note: '正确，消耗1点行动力',
           recommended: true,
           onSelect: () => {
@@ -1829,38 +1828,38 @@ export default class RescueScene extends Phaser.Scene {
             this.state.panic = clamp(this.state.panic - 30, 0, 100);
             this.state.trust = clamp(this.state.trust + 30, 0, 100);
             this.state.foundGrandma = true;
-            this.setHuahua('很好。先让她信任你，比直接拉她更安全。', 'encourage');
+            this.setHuahua('太棒了！先让她信任你，比硬拉她走安全一百倍。', 'encourage');
             this.refreshScene();
             this.afterAction();
           },
         },
         {
-          label: '大声催促她快走',
-          note: '错误，恐慌上升',
+          label: '大声说"奶奶别怕！快跟我走！"',
+          note: '错误，奶奶会被吓到',
           danger: true,
           onSelect: () => {
             this.state.panic = clamp(this.state.panic + 20, 0, 100);
-            this.applyWrongAction('她听不清也很害怕。大声催促只会让她更慌，应该慢慢说明身份。', 0);
+            this.applyWrongAction('她听不太清，大声喊只会让她更害怕。应该慢慢说话、先说清楚你是谁。', 0);
             this.afterAction();
           },
         },
         {
-          label: '直接拉她离开',
-          note: '错误，拒绝移动',
+          label: '抓住她的手，赶紧带她往外走',
+          note: '错误，奶奶不信任你会反抗',
           danger: true,
           onSelect: () => {
             this.state.panic = clamp(this.state.panic + 30, 0, 100);
             this.state.trust = clamp(this.state.trust - 10, 0, 100);
-            this.applyWrongAction('不要直接拉扯恐慌老人。先说明你是谁，再引导她跟着你走。', 0);
+            this.applyWrongAction('不要硬拉害怕的老人。先蹲下来让她看清你是谁，再慢慢引导她跟你走。', 0);
             this.afterAction();
           },
         },
         {
-          label: '让她自己找出口',
-          note: '错误，继续受烟',
+          label: '告诉她"出口在左边"，让她自己走过来',
+          note: '错误，奶奶看不见也害怕',
           danger: true,
           onSelect: () => {
-            this.applyWrongAction('她看不清方向。救援要给清晰、温和的引导。', 0);
+            this.applyWrongAction('她现在看不清方向，也没力气自己走。你要给她清晰温和的引导，带她一步步走出去。', 0);
             this.afterAction();
           },
         },
@@ -1871,7 +1870,7 @@ export default class RescueScene extends Phaser.Scene {
   showMaskGrandmaCard() {
     this.showDecisionCard({
       title: '是否给王奶奶戴上防烟面罩？',
-      body: '戴上后，王奶奶在烟雾中的伤害会显著降低，护送过程更稳。',
+      body: '奶奶戴上后，烟对她的伤害会小很多。护送路上就安全多了！',
       options: [
         {
           label: '给王奶奶戴上面罩',
@@ -1882,7 +1881,7 @@ export default class RescueScene extends Phaser.Scene {
             this.state.grandmaMasked = true;
             this.state.trust = clamp(this.state.trust + 10, 0, 100);
             this.playSfx('a40_pickup', 0.45);
-            this.setHuahua('有防护会更稳。现在规划路线，尽快离开烟雾区。', 'encourage');
+            this.setHuahua('有面罩保护了！现在快想好路线，带奶奶离开烟区。', 'encourage');
             this.refreshScene();
             this.afterAction();
           },
@@ -1891,7 +1890,7 @@ export default class RescueScene extends Phaser.Scene {
           label: '暂时不用，立刻撤离',
           note: '合理选择',
           onSelect: () => {
-            this.setHuahua('可以，但烟雾伤害会更高。路线要更短、更果断。', 'hint');
+            this.setHuahua('好吧，但奶奶没面罩会吸到更多烟。路要尽量短、尽量快。', 'hint');
             this.refreshScene();
           },
         },
@@ -1902,7 +1901,7 @@ export default class RescueScene extends Phaser.Scene {
   showEscortCard() {
     this.showDecisionCard({
       title: '引导王奶奶撤离',
-      body: '进入护送阶段后，王奶奶会跟随你上一格移动。不要穿过明火，尽量避开高浓度烟雾。',
+      body: '奶奶相信你了！她会跟着你的脚步走。记住：别走有火的地方，尽量绕开浓烟。',
       options: [
         {
           label: '引导撤离',
@@ -1914,7 +1913,7 @@ export default class RescueScene extends Phaser.Scene {
             this.state.escortStartRound = this.state.round;
             this.state.escortMoves = 0;
             this.state.maxRound = Math.max(this.state.maxRound, this.state.round + ESCORT_BONUS_ROUNDS);
-            this.setHuahua('现在她会跟着你走。不要穿过火焰，尽量避开浓烟。', 'encourage');
+            this.setHuahua('奶奶会跟着你走了！别走有火的地方，尽量绕开浓烟。', 'encourage');
             this.refreshScene();
             this.afterAction();
           },
@@ -1941,7 +1940,7 @@ export default class RescueScene extends Phaser.Scene {
     }
 
     this.state.panic = clamp(this.state.panic - 5, 0, 100);
-    this.setHuahua('你放慢了脚步，她跟得更稳。继续往左侧安全区走。', 'encourage');
+    this.setHuahua('你放慢脚步等她，她跟得更稳了。继续往左边安全区走！', 'encourage');
     this.maybeNeighborAssist();
     this.refreshScene();
     this.checkSuccess();
@@ -1963,7 +1962,7 @@ export default class RescueScene extends Phaser.Scene {
       }
     }
 
-    this.setHuahua(this.state.neighborAssigned ? '你放慢语速，邻居也在出口呼应，王奶奶重新跟上了。' : '你重新说明方向，让王奶奶看着你走，她稳定下来了。', 'encourage');
+    this.setHuahua(this.state.neighborAssigned ? '你慢慢说话，邻居也在出口喊她，奶奶重新跟上了。' : '你重新指了方向，让奶奶看着你，她不怕了。', 'encourage');
     this.maybeNeighborAssist();
     this.refreshScene();
     this.checkSuccess();
@@ -1997,7 +1996,7 @@ export default class RescueScene extends Phaser.Scene {
     }
 
     if (this.state.grandmaHp <= 0) {
-      this.finish(false, '烟雾里停留太久了。下次要更快判断路线，必要时先放弃加分项，优先撤离。');
+      this.finish(false, '奶奶在烟里待太久了。下次快点想好路线，把人带出来最要紧！');
       return;
     }
 
@@ -2020,7 +2019,7 @@ export default class RescueScene extends Phaser.Scene {
     this.state.pendingFireWarnings = fireTarget ? [fireTarget] : [];
     this.state.pendingGrandmaWarning = grandmaTarget;
     this.playSfx('a39_smoke_expand', 0.55);
-    this.setHuahua('烟雾和火势有变化迹象。先看预警位置，马上进入下一回合。', 'hint');
+    this.setHuahua('注意！烟雾和火好像要变了，看看预警标记。', 'hint');
     this.refreshScene();
 
     this.time.delayedCall(900, () => {
@@ -2038,12 +2037,12 @@ export default class RescueScene extends Phaser.Scene {
     this.state.resolvingEnvironment = false;
 
     if (this.state.grandmaHp <= 0) {
-      this.finish(false, '烟雾里停留太久了。下次要更快判断路线，必要时先放弃加分项，优先撤离。');
+      this.finish(false, '奶奶在烟里待太久了。下次快点想好路线，把人带出来最要紧！');
       return;
     }
 
     if (this.state.fireRisk >= 100) {
-      this.finish(false, '火势已经不可安全接近。现实中遇到这种情况，要撤离到安全区域，等待消防救援。');
+      this.finish(false, '火太大了，已经没办法安全靠近。现实中遇到这种情况，赶紧撤到安全地方等消防员！');
       return;
     }
 
@@ -2055,7 +2054,7 @@ export default class RescueScene extends Phaser.Scene {
     }
 
     if (this.state.round > this.state.maxRound) {
-      this.finish(false, '救援窗口已经错过。下次可以减少无效移动，把行动力优先用在观察、安抚和撤离上。');
+      this.finish(false, '救援时机错过了。下次少走冤枉路，早点观察、安抚、撤离！');
       return;
     }
 
@@ -2064,7 +2063,7 @@ export default class RescueScene extends Phaser.Scene {
       this.state.maskReminderRound = this.state.round;
     }
 
-    this.setHuahua(messages.length > 0 ? messages.join(' ') : hadExpansion ? '环境已经变化。新回合开始，重新确认路线。' : '环境暂时稳定。新回合开始，继续规划救援路线。', this.state.grandmaHp <= 40 || messages.length > 0 ? 'hint' : 'normal');
+    this.setHuahua(messages.length > 0 ? messages.join(' ') : hadExpansion ? '环境变了。新回合开始，重新看看路线。' : '暂时安全。新回合开始，继续带奶奶往外走。', this.state.grandmaHp <= 40 || messages.length > 0 ? 'hint' : 'normal');
     this.refreshScene();
   }
 
@@ -2214,7 +2213,7 @@ export default class RescueScene extends Phaser.Scene {
       this.markLevelOneCleared();
       this.playSfx('a47_success', 0.78);
       this.time.delayedCall(450, () => this.playSfx('a48_flower', 0.72));
-      this.setHuahua('成功撤离。你做到了安全、耐心、有效。', 'relieved');
+      this.setHuahua('成功带奶奶撤离！你做到了安全、耐心、冷静，太厉害了！', 'relieved');
     } else {
       this.playSfx('a43_action_error', 0.72);
       this.setHuahua(reason, 'hint');
@@ -2231,7 +2230,7 @@ export default class RescueScene extends Phaser.Scene {
 
     this.showDecisionCard({
       title: `${title}  ${score}分 / ${grade}`,
-      body: `${reason}\n\n${behaviors}\n\n知识卡：火灾中，最重要的是先保证自身安全并及时呼救。面对恐慌老人，不要强拉硬拽，要先说明身份、稳定情绪，再引导撤离。`,
+      body: `${reason}\n\n${behaviors}\n\n记住：火灾中最重要的是先保证自己安全、马上打119。遇到害怕的老人，别硬拉，先蹲下来说你是谁，等她信任你。`,
       persist: true,
       options: [
         {
@@ -2253,7 +2252,7 @@ export default class RescueScene extends Phaser.Scene {
   showKnowledgeCard(success, reason) {
     this.showDecisionCard({
       title: '火场协助知识卡',
-      body: '1. 先判断自身安全并呼叫119，不盲目深入浓烟。\n2. 浓烟中低姿移动，看不清时先观察，不穿越明火。\n3. 面对恐慌老人，蹲下、慢说、说明身份，再引导撤离。\n4. 面罩和阀门是风险管理手段，但撤离生命优先。',
+      body: '1. 火灾来了别慌！先退到安全地方，马上打119。\n2. 浓烟里弯着腰走（烟往上飘），看不清就先停下来观察，千万别往火里走。\n3. 遇到害怕的老人，蹲下来和ta一样高，慢慢说你是谁，ta信你了才能跟你走。\n4. 防烟面罩和关阀门能帮大忙，但把人安全带出去永远排第一。',
       persist: true,
       options: [
         {
@@ -2295,19 +2294,19 @@ export default class RescueScene extends Phaser.Scene {
 
   getBehaviorSummary(success) {
     const lines = [
-      this.state.hasCalled119 ? '你先完成了安全判断和呼救。' : '开场安全判断没有完成。',
-      this.state.isCalmed ? '你用慢说和说明身份安抚了王奶奶。' : '还没有建立信任，老人不容易配合。',
-      this.state.grandmaMasked ? '你给王奶奶戴上了防烟面罩。' : '没有给王奶奶使用面罩，护送压力更高。',
-      this.state.gasClosed ? '你在安全条件下关闭了燃气阀门。' : '燃气阀门未处理，但优先救人也是合理路线。',
+      this.state.hasCalled119 ? '你上来就先打119报警，第一步做得对！' : '你跳过了最重要的第一步——打119报警。',
+      this.state.isCalmed ? '你蹲下来慢慢和奶奶说话，她相信你了。' : '奶奶还没信任你，所以不太配合。',
+      this.state.grandmaMasked ? '你帮奶奶戴上了防烟面罩，她在烟里安全多了。' : '奶奶没戴面罩，烟对她的伤害就更大了。',
+      this.state.gasClosed ? '你关了燃气阀门，火势变慢了些。' : '你没关阀门，但先救人也是明智的选择！',
     ];
-    if (success) lines.unshift(`王奶奶剩余生命状态 ${Math.round(this.state.grandmaHp)}，用时 ${this.state.round} 回合。`);
-    lines.push(this.state.neighborAssigned ? '你安排邻居去楼道接应119，现场协作更清晰。' : '可以让门口邻居接应119，给撤离和救援留出通道。');
+    if (success) lines.unshift(`奶奶最后生命值 ${Math.round(this.state.grandmaHp)}，你用了 ${this.state.round} 个回合。`);
+    lines.push(this.state.neighborAssigned ? '你让邻居去接应119了，大家配合得很好！' : '下次记得让门口邻居去接应119，多一个人帮忙更安全。');
     return lines.join('\n');
   }
 
   checkSuccess() {
     if (this.state.escortMode && inSafeZone(this.state.player) && inSafeZone(this.state.grandma)) {
-      this.finish(true, '王奶奶到达安全区。出来后先远离烟雾，再等待消防和医护人员。');
+      this.finish(true, '奶奶到安全区了！先离烟远一点，等着消防员和医生过来。');
     }
   }
 
@@ -2348,7 +2347,7 @@ export default class RescueScene extends Phaser.Scene {
     this.setHuahua(message, 'hint');
     this.refreshScene();
     if (this.state.fireRisk >= 100) {
-      this.finish(false, '火场风险已经达到不可安全接近的程度。现实中应撤离并等待专业救援。');
+      this.finish(false, '火场太危险了，没办法再靠近。现实中应该马上撤到安全地方，等消防员来！');
     }
   }
 
@@ -2446,17 +2445,17 @@ export default class RescueScene extends Phaser.Scene {
   checkDiscoveries() {
     if (!this.state.foundMask && this.isRevealed(POSITIONS.mask.x, POSITIONS.mask.y)) {
       this.state.foundMask = true;
-      this.setHuahua('看到了防烟面罩。拿到它，护送王奶奶时会安全很多。', 'hint');
+      this.setHuahua('找到防烟面罩啦！拿到它，带奶奶走的时候安全很多。', 'hint');
     }
 
     if (!this.state.foundValve && this.isRevealed(POSITIONS.valve.x, POSITIONS.valve.y)) {
       this.state.foundValve = true;
-      this.setHuahua('那边像是燃气阀门。只有路线安全、时间允许时再处理。救人和撤离仍然是第一目标。', 'hint');
+      this.setHuahua('看到燃气阀门了。路是安全的就顺手关上，但救人最重要！', 'hint');
     }
 
     if (!this.state.foundGrandma && this.isGrandmaVisible()) {
       this.state.foundGrandma = true;
-      this.setHuahua('找到王奶奶了。她听不清也很害怕，别直接拉她。先慢慢说明身份。', 'hint');
+      this.setHuahua('看到奶奶了！她好像很害怕。记住别硬拉，先蹲下来说你是谁。', 'hint');
     }
   }
 
@@ -2522,10 +2521,10 @@ export default class RescueScene extends Phaser.Scene {
   getBlockReason(x, y, { respectFog = false } = {}) {
     if (respectFog && !this.isRevealed(x, y) && !isSame({ x, y }, this.state.grandma)) return null;
     const kind = this.getTileKind(x, y);
-    if (isSame({ x, y }, this.state.grandma)) return '不要站到王奶奶身上。停在相邻格，用“沟通护送”安抚她。';
+    if (isSame({ x, y }, this.state.grandma)) return '不要站到王奶奶身上。停在相邻格，用"沟通护送"安抚她。';
     if (kind === 'WALL') return '这里是墙体或不可进入区域。';
     if (kind === 'FIRE') return '明火格不能通行。绕开它，或等待专业救援。';
-    if (kind === 'OBS') return '这里被障碍挡住了。靠近后使用“现场处理”清障。';
+    if (kind === 'OBS') return '这里被障碍挡住了。靠近后使用"现场处理"清障。';
     if (kind === 'OBJ') return '阀门需要相邻交互，不能站到阀门格。';
     return null;
   }
